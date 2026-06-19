@@ -16,8 +16,8 @@
     "sourceMap": true,
     "resolveJsonModule": true,
     "jsx": "react-jsx",
-    "types": ["chrome", "node", "vitest/globals"]
+    "types": ["chrome", "node"]
   },
-  "include": ["src", "../../lib", "../../tests/extension"],
+  "include": ["src", "../../lib/shared"],
   "exclude": ["node_modules", "dist"]
 }
