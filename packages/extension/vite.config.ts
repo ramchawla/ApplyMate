@@ -5,13 +5,15 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  publicDir: 'public',
   build: {
     outDir: 'dist',
+    emptyOutDir: true,
     rollupOptions: {
       input: {
         content: path.resolve(__dirname, 'src/content/content.ts'),
         background: path.resolve(__dirname, 'src/background.ts'),
-        'side-panel': path.resolve(__dirname, 'src/ui/side-panel.tsx'),
+        'side-panel': path.resolve(__dirname, 'side-panel.html'),
       },
       output: {
         entryFileNames: '[name].js',
