@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { JobDataReview } from "./components/JobDataReview";
+import { FormValidation } from "./components/FormValidation";
 import { SidePanelState } from "../types";
 import { getExtractedJobData } from "../utils/storage";
 
@@ -58,7 +59,12 @@ function App() {
       )}
 
       {state.currentTab === "form-validation" && (
-        <div className="p-4">Form Validation (Task 1.10)</div>
+        <FormValidation
+          fields={state.extractedJobData.formFields}
+          onProceed={() =>
+            setState((prev) => ({ ...prev, currentTab: "tailoring-review" }))
+          }
+        />
       )}
       {state.currentTab === "tailoring-review" && (
         <div className="p-4">Tailoring Review (Phase 2)</div>
