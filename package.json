@@ -1,0 +1,19 @@
+{
+  "name": "applymate",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:extension": "pnpm --filter @applymate/extension dev",
+    "build:extension": "pnpm --filter @applymate/extension build",
+    "dev:dashboard": "pnpm --filter @applymate/dashboard dev",
+    "build:dashboard": "pnpm --filter @applymate/dashboard build",
+    "test": "pnpm --filter @applymate/extension test",
+    "test:extension": "pnpm --filter @applymate/extension test",
+    "type-check": "pnpm --filter @applymate/extension type-check"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
