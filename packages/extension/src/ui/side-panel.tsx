@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
+import "./styles/tailwind.css";
 import { JobDataReview } from "./components/JobDataReview";
 import { FormValidation } from "./components/FormValidation";
 import { SidePanelState } from "../types";
