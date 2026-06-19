@@ -1,6 +1,7 @@
 import { extractJDContent, ExtractedContent } from "./jd";
 
 export type { ExtractedContent } from "./jd";
+export { extractFormFields } from "./form";
 
 export function extractJD(html: string, _board: string): ExtractedContent {
   // Board-specific extractors can override; generic path used for all boards
