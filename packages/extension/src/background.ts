@@ -2,6 +2,19 @@ import { ExtractedJobData } from "./types";
 
 console.log("[ApplyMate] Background service worker started");
 
+// Open the side panel when the toolbar icon is clicked. This is the reliable
+// path: sidePanel.open() requires a user gesture, and a message round-trip from
+// an in-page button loses that gesture context.
+chrome.runtime.onInstalled.addListener(() => {
+  if (chrome.sidePanel?.setPanelBehavior) {
+    chrome.sidePanel
+      .setPanelBehavior({ openPanelOnActionClick: true })
+      .catch((error) =>
+        console.error("[ApplyMate] setPanelBehavior failed:", error),
+      );
+  }
+});
+
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   switch (request?.type) {
     case "JOB_EXTRACTED":
