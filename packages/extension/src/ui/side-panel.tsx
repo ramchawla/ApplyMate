@@ -3,8 +3,11 @@ import ReactDOM from "react-dom/client";
 import "./styles/tailwind.css";
 import { JobDataReview } from "./components/JobDataReview";
 import { FormValidation } from "./components/FormValidation";
-import { SidePanelState } from "../types";
-import { getExtractedJobData } from "../utils/storage";
+import { ManualEntry } from "./components/ManualEntry";
+import { ExtractedJobData, SidePanelState } from "../types";
+import { getExtractedJobData, updateExtractedJobData } from "../utils/storage";
+
+const LOW_CONFIDENCE_THRESHOLD = 0.7;
 
 function App() {
   const [state, setState] = useState<SidePanelState>({
@@ -33,17 +36,27 @@ function App() {
     });
   }
 
+  async function acceptManualData(data: ExtractedJobData) {
+    await updateExtractedJobData(data);
+    setState((prev) => ({
+      ...prev,
+      extractedJobData: data,
+      currentTab: "data-review",
+    }));
+  }
+
   if (state.isLoading) {
     return <div className="p-4">Loading…</div>;
   }
 
-  if (!state.extractedJobData) {
+  const data = state.extractedJobData;
+
+  // No data, or low-confidence detection not yet confirmed by the user →
+  // fall back to manual entry (pre-filled when partial data exists).
+  if (!data || data.boardConfidence < LOW_CONFIDENCE_THRESHOLD) {
     return (
-      <div className="p-4">
-        <p>
-          No job data detected. Visit a job posting and click the ApplyMate
-          button.
-        </p>
+      <div className="w-80 max-h-screen overflow-y-auto bg-white">
+        <ManualEntry initial={data} onSubmit={acceptManualData} />
       </div>
     );
   }
@@ -52,7 +65,7 @@ function App() {
     <div className="w-80 max-h-screen overflow-y-auto bg-white">
       {state.currentTab === "data-review" && (
         <JobDataReview
-          data={state.extractedJobData}
+          data={data}
           onNext={() =>
             setState((prev) => ({ ...prev, currentTab: "form-validation" }))
           }
@@ -61,7 +74,7 @@ function App() {
 
       {state.currentTab === "form-validation" && (
         <FormValidation
-          fields={state.extractedJobData.formFields}
+          fields={data.formFields}
           onProceed={() =>
             setState((prev) => ({ ...prev, currentTab: "tailoring-review" }))
           }
