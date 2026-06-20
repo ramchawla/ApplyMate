@@ -669,7 +669,10 @@ This project demonstrates:
 
 **"Compiled LaTeX to PDF client-side via Tectonic-WASM with zero server cost; built a portal abstraction layer with heuristic-plus-LLM form auto-fill."**
 
-✅ **Tectonic-WASM** — LaTeX → PDF compilation in browser
+✅ **Client-side LaTeX→PDF via WASM** — shipped with the SwiftLaTeX PdfTeX
+engine, self-hosted under the dashboard's `public/swiftlatex/` (the original
+"Tectonic-WASM" wording; SwiftLaTeX is the engine that is actually packaged for
+the browser). Compilation runs entirely in the browser.
 ✅ **Zero server cost** — all processing local
 ✅ **Portal abstraction** — Next.js dashboard managing applications + resume versions
 ✅ **Heuristic-plus-LLM** — form field detection (heuristic) + LLM-guided answers (LLM)

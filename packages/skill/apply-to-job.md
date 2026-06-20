@@ -60,6 +60,10 @@ non-negotiable validation. Never bypass the validator.
      -d @output.json
    ```
 
+   The POSTed JSON must include `jobUrl`, `company`, `jobTitle`, and
+   `jobDescription` in addition to the `ApplyJobOutput` fields, so the bridge
+   can persist a full application + JD archive row to SQLite.
+
    If the POST fails, tell the user to start the bridge with `pnpm bridge`,
    then retry. Never block on this — the report and LaTeX are already produced.
 
