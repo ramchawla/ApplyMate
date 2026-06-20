@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchLatestOutput } from "../../utils/bridge";
+import { BridgeTokenField } from "./BridgeTokenField";
 
 interface BulletView {
   original: string;
@@ -50,13 +51,13 @@ export function TailoringReview({ onProceed }: Props) {
 
   if (loading || !output) {
     return (
-      <div className="p-4 text-sm">
-        Waiting for tailored resume from Claude Code…
-        <div className="text-xs text-gray-500 mt-2">
+      <div className="p-4 text-sm space-y-3">
+        <div>Waiting for tailored resume from Claude Code…</div>
+        <div className="text-xs text-gray-500">
           Run <code>/apply-to-job</code> and ensure the bridge is running
-          (<code>pnpm bridge</code>). Paste the bridge token in the Form tab if
-          prompted.
+          (<code>pnpm bridge</code>).
         </div>
+        <BridgeTokenField />
       </div>
     );
   }
