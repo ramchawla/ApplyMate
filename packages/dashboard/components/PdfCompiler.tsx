@@ -31,7 +31,15 @@ export function PdfCompiler({ latex }: { latex: string }) {
       </button>
 
       {error && (
-        <pre className="text-xs text-red-600 whitespace-pre-wrap">{error}</pre>
+        <div className="space-y-1">
+          <pre className="text-xs text-red-600 whitespace-pre-wrap">{error}</pre>
+          <p className="text-xs text-gray-500">
+            The SwiftLaTeX WASM engine runs in your browser, but a full compile
+            also needs its TeX format + package assets hosted under{" "}
+            <code>/swiftlatex</code> (or its TeXLive endpoint). Until those are
+            vendored, copy the Raw LaTeX below into Overleaf to produce the PDF.
+          </p>
+        </div>
       )}
 
       {url && (
