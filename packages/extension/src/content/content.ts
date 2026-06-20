@@ -1,5 +1,6 @@
 import { detect } from "./detectors/index";
 import { extractJD, extractFormFields } from "./extractors/index";
+import { applyFillPlan } from "./fill";
 import { ExtractedJobData } from "../types";
 import { v4 as uuidv4 } from "uuid";
 
@@ -87,6 +88,12 @@ if (inExtension) {
     if (request?.type === "EXTRACT_JOB_DATA") {
       void extractAndSend(document.documentElement.outerHTML);
       sendResponse({ status: "extraction_started" });
+      return false;
+    }
+    if (request?.type === "APPLY_FILL_PLAN") {
+      const result = applyFillPlan(request.instructions, document);
+      sendResponse(result);
+      return false;
     }
     return false;
   });

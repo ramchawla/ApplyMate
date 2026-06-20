@@ -47,6 +47,22 @@ non-negotiable validation. Never bypass the validator.
    `plausibilityScore < 0.7` or `invariantChecksPassed === false` — and ask
    for approval before the resume is used. Never auto-submit.
 
+7. **Publish to the extension (bridge).**
+   Add the `jobUrl` field to the output and POST it to the local bridge so the
+   side panel can pick it up. The bridge requires the bearer token it printed
+   on startup (also at `~/.applymate/bridge-token`):
+
+   ```bash
+   TOKEN=$(cat ~/.applymate/bridge-token)
+   curl -s -X POST http://127.0.0.1:4179/output \
+     -H 'content-type: application/json' \
+     -H "authorization: Bearer $TOKEN" \
+     -d @output.json
+   ```
+
+   If the POST fails, tell the user to start the bridge with `pnpm bridge`,
+   then retry. Never block on this — the report and LaTeX are already produced.
+
 ## Hard rules
 - No invented skills, metrics, employers, or dates.
 - Every added keyword maps to a corpus anchor; the validator enforces this.
