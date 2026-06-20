@@ -23,4 +23,34 @@ export interface SidePanelState {
     | "tailoring-review"
     | "form-auto-fill";
   isLoading: boolean;
+  approvedOutput?: {
+    coverLetter: string;
+    formFieldGuidance: { fieldId: string; suggestedAnswer: string }[];
+  };
+}
+
+export interface Profile {
+  fullName: string;
+  email: string;
+  phone: string;
+  linkedin: string;
+  github: string;
+  website: string;
+}
+
+export interface FillInstruction {
+  fieldId: string;
+  valueType: string;
+  value: string;
+  isFile: boolean;
+}
+
+export interface FillPlan {
+  instructions: FillInstruction[];
+  unmappedFieldIds: string[];
+}
+
+export interface ApplyFillPlanMessage {
+  type: "APPLY_FILL_PLAN";
+  instructions: FillInstruction[];
 }
