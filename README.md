@@ -8,6 +8,32 @@ End-to-end AI job application agent across Chrome MV3 extension + Next.js dashbo
 
 ---
 
+## Quickstart (local, all parts)
+
+```bash
+pnpm install
+
+# 1. Vector DB (Docker) for the skill
+pnpm skill:db:up
+
+# 2. Bridge (prints a token; also saved to ~/.applymate/bridge-token)
+pnpm bridge
+
+# 3. Dashboard
+pnpm --filter @applymate/dashboard dev    # http://localhost:3001
+
+# 4. Extension: build, then load packages/extension/dist as an unpacked
+#    extension at chrome://extensions (Developer mode).
+pnpm build:extension
+```
+
+Then on a job page: trigger ApplyMate (toolbar icon or Ctrl/Cmd+Shift+Y) →
+validate fields → run `/apply-to-job` in Claude Code (posts to the bridge) →
+review the report → auto-fill → review → submit manually. Paste the bridge
+token into the side panel once. Run all tests with `pnpm -r test`.
+
+---
+
 ## 1. Architecture Overview
 
 ### Tech Stack
