@@ -1,0 +1,15 @@
+experiences:
+  - id: rust-async-http
+    title: Built concurrent HTTP server in Rust
+    description: Implemented async Rust web server handling high throughput.
+    skills: [rust, async, concurrency, http]
+    metrics: ["10k req/s", "sub-100ms latency"]
+    tags: [backend, performance, systems]
+    claim_anchor: Expert in async Rust systems programming
+  - id: postgres-zero-downtime
+    title: PostgreSQL zero-downtime migration
+    description: Led migration of a 50M-row table with no downtime.
+    skills: [postgres, sql, devops]
+    metrics: ["50M rows", "2hr window"]
+    tags: [databases, reliability]
+    claim_anchor: Database reliability and zero-downtime migrations
