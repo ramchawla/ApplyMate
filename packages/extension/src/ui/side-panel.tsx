@@ -4,6 +4,7 @@ import "./styles/tailwind.css";
 import { JobDataReview } from "./components/JobDataReview";
 import { FormValidation } from "./components/FormValidation";
 import { ManualEntry } from "./components/ManualEntry";
+import { TailoringReview } from "./components/TailoringReview";
 import { ExtractedJobData, SidePanelState } from "../types";
 import { getExtractedJobData, updateExtractedJobData } from "../utils/storage";
 
@@ -81,7 +82,18 @@ function App() {
         />
       )}
       {state.currentTab === "tailoring-review" && (
-        <div className="p-4">Tailoring Review (Phase 2)</div>
+        <TailoringReview
+          onProceed={(output) =>
+            setState((prev) => ({
+              ...prev,
+              approvedOutput: {
+                coverLetter: output.coverLetter,
+                formFieldGuidance: output.formFieldGuidance ?? [],
+              },
+              currentTab: "form-auto-fill",
+            }))
+          }
+        />
       )}
       {state.currentTab === "form-auto-fill" && (
         <div className="p-4">Form Auto-Fill (Phase 3)</div>
