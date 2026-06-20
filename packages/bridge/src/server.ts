@@ -1,9 +1,13 @@
 import { createServer as createHttpServer, type Server } from "node:http";
 import type { OutputStore } from "./store";
+import type { Db } from "../../../lib/local/db";
+import { persistOutput } from "./persist";
 
 export interface ServerOptions {
   // When set, /output and /output/latest require `Authorization: Bearer <token>`.
   token?: string;
+  // When set, each posted output is persisted to SQLite.
+  db?: Db;
 }
 
 // Reflect CORS only for the extension origin. A localhost bridge holding the
@@ -78,6 +82,13 @@ export function createServer(
             return send(400, { error: "jobUrl is required" });
           }
           store.set(parsed);
+          if (options.db) {
+            try {
+              persistOutput(options.db, parsed);
+            } catch (err) {
+              console.error("[ApplyMate] persist failed:", err);
+            }
+          }
           return send(200, { stored: true });
         } catch {
           return send(400, { error: "invalid JSON" });

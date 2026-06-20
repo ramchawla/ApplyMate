@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "./server";
 import { OutputStore } from "./store";
+import { openDb, migrate } from "../../../lib/local/db";
 
 const PORT = Number(process.env.APPLYMATE_BRIDGE_PORT ?? 4179);
 
@@ -16,7 +17,9 @@ mkdirSync(dir, { recursive: true });
 writeFileSync(join(dir, "bridge-token"), token, { mode: 0o600 });
 
 const store = new OutputStore();
-const server = createServer(store, { token });
+const db = openDb();
+migrate(db);
+const server = createServer(store, { token, db });
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`[ApplyMate] bridge listening on http://127.0.0.1:${PORT}`);
