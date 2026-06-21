@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { extract as extractLinkedIn } from "../../packages/extension/src/content/extractors/boards/linkedin";
 import { extract as extractGreenhouse } from "../../packages/extension/src/content/extractors/boards/greenhouse";
+import { extract as extractLever } from "../../packages/extension/src/content/extractors/boards/lever";
+import { extract as extractAshby } from "../../packages/extension/src/content/extractors/boards/ashby";
+import { extract as extractWorkday } from "../../packages/extension/src/content/extractors/boards/workday";
 
 function doc(html: string): Document {
   return new DOMParser().parseFromString(html, "text/html");
@@ -29,5 +32,41 @@ describe("board extractors: greenhouse", () => {
     const r = extractGreenhouse(d);
     expect(r.jobTitle).toBe("Backend Engineer");
     expect(r.jobDescription).toContain("Postgres");
+  });
+});
+
+describe("board extractors: lever", () => {
+  it("pulls title and JD from Lever markup", () => {
+    const d = doc(`
+      <div class="posting-headline"><h2>Platform Engineer</h2></div>
+      <div class="section-wrapper page-full-width">Kafka and Kubernetes at scale.</div>
+    `);
+    const r = extractLever(d);
+    expect(r.jobTitle).toBe("Platform Engineer");
+    expect(r.jobDescription).toContain("Kafka");
+  });
+});
+
+describe("board extractors: ashby", () => {
+  it("pulls title and JD from Ashby markup", () => {
+    const d = doc(`
+      <h1>Founding Engineer</h1>
+      <div class="_descriptionText_abc123">Rust, TypeScript, and distributed systems.</div>
+    `);
+    const r = extractAshby(d);
+    expect(r.jobTitle).toBe("Founding Engineer");
+    expect(r.jobDescription).toContain("distributed systems");
+  });
+});
+
+describe("board extractors: workday", () => {
+  it("pulls title and JD from Workday automation ids", () => {
+    const d = doc(`
+      <h2 data-automation-id="jobPostingHeader">Software Engineer II</h2>
+      <div data-automation-id="jobPostingDescription">Java, Spring, and AWS.</div>
+    `);
+    const r = extractWorkday(d);
+    expect(r.jobTitle).toBe("Software Engineer II");
+    expect(r.jobDescription).toContain("Spring");
   });
 });
