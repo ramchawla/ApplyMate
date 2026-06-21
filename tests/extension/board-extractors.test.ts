@@ -4,6 +4,7 @@ import { extract as extractGreenhouse } from "../../packages/extension/src/conte
 import { extract as extractLever } from "../../packages/extension/src/content/extractors/boards/lever";
 import { extract as extractAshby } from "../../packages/extension/src/content/extractors/boards/ashby";
 import { extract as extractWorkday } from "../../packages/extension/src/content/extractors/boards/workday";
+import { extractJD } from "../../packages/extension/src/content/extractors/index";
 
 function doc(html: string): Document {
   return new DOMParser().parseFromString(html, "text/html");
@@ -68,5 +69,31 @@ describe("board extractors: workday", () => {
     const r = extractWorkday(d);
     expect(r.jobTitle).toBe("Software Engineer II");
     expect(r.jobDescription).toContain("Spring");
+  });
+});
+
+describe("extractJD dispatch", () => {
+  it("routes a workday board to the workday extractor", () => {
+    const html = `<h2 data-automation-id="jobPostingHeader">Workday Role</h2>
+      <div data-automation-id="jobPostingDescription">Workday-specific JD body text here.</div>`;
+    const r = extractJD(html, "workday");
+    expect(r.jobTitle).toBe("Workday Role");
+    expect(r.jobDescription).toContain("Workday-specific");
+    // board extractor scopes JD to the description node; generic would also
+    // sweep in the title text, so this proves dispatch actually routed.
+    expect(r.jobDescription).not.toContain("Workday Role");
+  });
+
+  it("falls back to generic when board selectors miss", () => {
+    const html = `<h1>Generic Title</h1>
+      <p>${"Plenty of generic job description text. ".repeat(10)}</p>`;
+    const r = extractJD(html, "lever");
+    expect(r.jobDescription).toContain("generic job description");
+  });
+
+  it("uses generic extractor for an unknown board", () => {
+    const html = `<h1>Unknown Co Role</h1><div>Some role details here that are long enough.</div>`;
+    const r = extractJD(html, "generic");
+    expect(r.jobTitle).toContain("Unknown Co Role");
   });
 });

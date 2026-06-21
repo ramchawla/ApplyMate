@@ -34,6 +34,7 @@ export interface DetectionResult {
     | "greenhouse"
     | "lever"
     | "ashby"
+    | "workday"
     | "generic"
     | "unknown";
   confidence: number;
