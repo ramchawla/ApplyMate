@@ -58,4 +58,32 @@ describe("Board Detection", () => {
     expect(result.board).toBe("unknown");
     expect(result.confidence).toBe(0);
   });
+
+  it("detects Greenhouse from URL", () => {
+    const r = detect({
+      url: "https://boards.greenhouse.io/acme/jobs/123",
+      html: "",
+    });
+    expect(r.board).toBe("greenhouse");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("detects Lever from URL", () => {
+    const r = detect({ url: "https://jobs.lever.co/acme/abc", html: "" });
+    expect(r.board).toBe("lever");
+  });
+
+  it("detects Ashby from URL", () => {
+    const r = detect({ url: "https://jobs.ashby.com/acme/xyz", html: "" });
+    expect(r.board).toBe("ashby");
+  });
+
+  it("detects Workday from URL", () => {
+    const r = detect({
+      url: "https://acme.wd1.myworkdayjobs.com/en-US/careers/job/123",
+      html: "",
+    });
+    expect(r.board).toBe("workday");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.9);
+  });
 });

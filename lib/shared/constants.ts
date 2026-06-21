@@ -20,8 +20,13 @@ export const BOARD_DETECTION_PATTERNS = {
     confidence: 0.95,
   },
   ashby: {
-    urlPattern: /\.ashby\.com/,
+    urlPattern: /ashby(hq)?\.com/,
     domSelectors: ["job-posting", "data-job-id"],
+    confidence: 0.95,
+  },
+  workday: {
+    urlPattern: /myworkdayjobs\.com/,
+    domSelectors: ["data-automation-id"],
     confidence: 0.95,
   },
 } as const;
