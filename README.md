@@ -8,6 +8,32 @@ End-to-end AI job application agent across Chrome MV3 extension + Next.js dashbo
 
 ---
 
+## Quickstart (local, all parts)
+
+```bash
+pnpm install
+
+# 1. Vector DB (Docker) for the skill
+pnpm skill:db:up
+
+# 2. Bridge (prints a token; also saved to ~/.applymate/bridge-token)
+pnpm bridge
+
+# 3. Dashboard
+pnpm --filter @applymate/dashboard dev    # http://localhost:3001
+
+# 4. Extension: build, then load packages/extension/dist as an unpacked
+#    extension at chrome://extensions (Developer mode).
+pnpm build:extension
+```
+
+Then on a job page: trigger ApplyMate (toolbar icon or Ctrl/Cmd+Shift+Y) →
+validate fields → run `/apply-to-job` in Claude Code (posts to the bridge) →
+review the report → auto-fill → review → submit manually. Paste the bridge
+token into the side panel once. Run all tests with `pnpm -r test`.
+
+---
+
 ## 1. Architecture Overview
 
 ### Tech Stack
@@ -669,10 +695,13 @@ This project demonstrates:
 
 **"Compiled LaTeX to PDF client-side via Tectonic-WASM with zero server cost; built a portal abstraction layer with heuristic-plus-LLM form auto-fill."**
 
-✅ **Client-side LaTeX→PDF via WASM** — shipped with the SwiftLaTeX PdfTeX
-engine, self-hosted under the dashboard's `public/swiftlatex/` (the original
-"Tectonic-WASM" wording; SwiftLaTeX is the engine that is actually packaged for
-the browser). Compilation runs entirely in the browser.
+✅ **Client-side LaTeX→PDF via WASM** — the SwiftLaTeX PdfTeX engine is
+self-hosted under the dashboard's `public/swiftlatex/` and loads + runs pdfTeX
+in the browser (verified: real pdfTeX 0.3.0 executes client-side). Producing a
+finished PDF additionally requires SwiftLaTeX's TeX format file and TeXLive
+package assets; vendoring those for fully-offline compile is a known follow-up.
+Until then the dashboard offers the LaTeX for download (the "Tectonic-WASM"
+résumé wording; SwiftLaTeX is the browser-packaged engine).
 ✅ **Zero server cost** — all processing local
 ✅ **Portal abstraction** — Next.js dashboard managing applications + resume versions
 ✅ **Heuristic-plus-LLM** — form field detection (heuristic) + LLM-guided answers (LLM)

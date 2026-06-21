@@ -15,6 +15,18 @@ chrome.runtime.onInstalled.addListener(() => {
   }
 });
 
+chrome.commands?.onCommand.addListener((command) => {
+  if (command !== "trigger-extract") return;
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tabId = tabs[0]?.id;
+    if (tabId === undefined) return;
+    chrome.tabs.sendMessage(tabId, { type: "EXTRACT_JOB_DATA" }, () => {
+      void chrome.runtime.lastError; // ignore if no content script on page
+    });
+    void openSidePanel();
+  });
+});
+
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   switch (request?.type) {
     case "JOB_EXTRACTED":

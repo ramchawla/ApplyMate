@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchLatestOutput } from "../../utils/bridge";
 import { BridgeTokenField } from "./BridgeTokenField";
+import { BridgeStatus } from "./BridgeStatus";
 
 interface BulletView {
   original: string;
@@ -57,6 +58,7 @@ export function TailoringReview({ onProceed }: Props) {
           Run <code>/apply-to-job</code> and ensure the bridge is running
           (<code>pnpm bridge</code>).
         </div>
+        <BridgeStatus />
         <BridgeTokenField />
       </div>
     );
