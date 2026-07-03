@@ -86,4 +86,47 @@ describe("Board Detection", () => {
     expect(r.board).toBe("workday");
     expect(r.confidence).toBeGreaterThanOrEqual(0.9);
   });
+
+  it("detects iCIMS from URL", () => {
+    const r = detect({
+      url: "https://careers-acme.icims.com/jobs/1234/software-engineer/job",
+      html: "",
+    });
+    expect(r.board).toBe("icims");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("detects Workable from URL", () => {
+    const r = detect({
+      url: "https://apply.workable.com/acme/j/ABCDEF1234/",
+      html: "",
+    });
+    expect(r.board).toBe("workable");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("detects SmartRecruiters from URL", () => {
+    const r = detect({
+      url: "https://jobs.smartrecruiters.com/Acme/744000000000000-engineer",
+      html: "",
+    });
+    expect(r.board).toBe("smartrecruiters");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("detects a generic job page via JSON-LD JobPosting", () => {
+    const html =
+      '<script type="application/ld+json">' +
+      JSON.stringify({
+        "@type": "JobPosting",
+        title: "Backend Engineer",
+        hiringOrganization: { name: "Acme Corp" },
+        description: "<p>Build services in Rust.</p>",
+      }) +
+      "</script>";
+    const r = detect({ url: "https://jobs.unknown-ats.io/posting/9", html });
+    expect(r.board).toBe("generic");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.7);
+    expect(r.method).toBe("dom_structure");
+  });
 });

@@ -44,6 +44,9 @@ export interface DetectionResult {
     | "lever"
     | "ashby"
     | "workday"
+    | "icims"
+    | "workable"
+    | "smartrecruiters"
     | "generic"
     | "unknown";
   confidence: number;

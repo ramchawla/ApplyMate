@@ -29,7 +29,42 @@ export const BOARD_DETECTION_PATTERNS = {
     domSelectors: ["data-automation-id"],
     confidence: 0.95,
   },
+  icims: {
+    urlPattern: /\.icims\.com/,
+    domSelectors: ["iCIMS_JobContent", "icims_content_iframe"],
+    confidence: 0.95,
+  },
+  workable: {
+    urlPattern: /apply\.workable\.com|jobs\.workable\.com/,
+    domSelectors: ['data-ui="job-title"', "whr-embed"],
+    confidence: 0.95,
+  },
+  smartrecruiters: {
+    urlPattern: /jobs\.smartrecruiters\.com|careers\.smartrecruiters\.com/,
+    domSelectors: ["st-jobDescription", "smartrecruiters"],
+    confidence: 0.95,
+  },
 } as const;
+
+// Living coverage list: board → detector file. Update last-verified when a
+// board is manually re-tested against a live posting.
+export const BOARD_COVERAGE: Record<
+  string,
+  { detector: string; lastVerified: string }
+> = {
+  linkedin: { detector: "detectors/linkedin.ts", lastVerified: "2026-07-03" },
+  indeed: { detector: "detectors/indeed.ts", lastVerified: "2026-07-03" },
+  greenhouse: { detector: "detectors/greenhouse.ts", lastVerified: "2026-07-03" },
+  lever: { detector: "detectors/lever.ts", lastVerified: "2026-07-03" },
+  ashby: { detector: "detectors/ashby.ts", lastVerified: "2026-07-03" },
+  workday: { detector: "detectors/workday.ts", lastVerified: "2026-07-03" },
+  icims: { detector: "detectors/icims.ts", lastVerified: "unverified" },
+  workable: { detector: "detectors/workable.ts", lastVerified: "unverified" },
+  smartrecruiters: {
+    detector: "detectors/smartrecruiters.ts",
+    lastVerified: "unverified",
+  },
+};
 
 // Order matters: matching walks these entries top-down, so more specific
 // value types (first/last name, linkedin before generic website/url) must

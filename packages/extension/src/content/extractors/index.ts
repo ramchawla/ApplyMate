@@ -4,6 +4,9 @@ import { extract as greenhouse } from "./boards/greenhouse";
 import { extract as lever } from "./boards/lever";
 import { extract as ashby } from "./boards/ashby";
 import { extract as workday } from "./boards/workday";
+import { extract as icims } from "./boards/icims";
+import { extract as workable } from "./boards/workable";
+import { extract as smartrecruiters } from "./boards/smartrecruiters";
 
 export type { ExtractedContent } from "./jd";
 export { extractFormFields } from "./form";
@@ -14,6 +17,9 @@ const BOARD_EXTRACTORS: Record<string, (doc: Document) => ExtractedContent> = {
   lever,
   ashby,
   workday,
+  icims,
+  workable,
+  smartrecruiters,
 };
 
 export function extractJD(html: string, board: string): ExtractedContent {

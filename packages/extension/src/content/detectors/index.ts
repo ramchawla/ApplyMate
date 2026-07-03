@@ -5,6 +5,9 @@ import { detectGreenhouse } from "./greenhouse";
 import { detectLever } from "./lever";
 import { detectAshby } from "./ashby";
 import { detectWorkday } from "./workday";
+import { detectIcims } from "./icims";
+import { detectWorkable } from "./workable";
+import { detectSmartRecruiters } from "./smartrecruiters";
 import { detectGeneric } from "./generic";
 
 export interface DetectionInput {
@@ -20,6 +23,9 @@ export function detect(input: DetectionInput): DetectionResult {
     detectLever,
     detectAshby,
     detectWorkday,
+    detectIcims,
+    detectWorkable,
+    detectSmartRecruiters,
   ];
   for (const fn of boards) {
     const result = fn(input);
