@@ -132,4 +132,51 @@ describe("bridge server with token", () => {
     });
     expect(res.status).toBe(200);
   });
+
+  it("serves master resume keywords from a configured path", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = mkdtempSync(join(tmpdir(), "applymate-"));
+    const texPath = join(dir, "resume-master.tex");
+    writeFileSync(
+      texPath,
+      "\\section{Skills} Rust, TypeScript, PostgreSQL, Docker",
+    );
+
+    const kwStore = new (await import("../../packages/bridge/src/store")).OutputStore();
+    const kwServer = (await import("../../packages/bridge/src/server")).createServer(
+      kwStore,
+      { masterResumePath: texPath },
+    );
+    await new Promise<void>((r) => kwServer.listen(0, r));
+    const addr = kwServer.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
+
+    const res = await fetch(`http://127.0.0.1:${port}/resume/keywords`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.keywords).toContain("rust");
+    expect(body.keywords).toContain("typescript");
+    expect(body.keywords).toContain("postgresql");
+    expect(body.keywords).not.toContain("python");
+
+    await new Promise<void>((r) => kwServer.close(() => r()));
+  });
+
+  it("404s resume keywords when master resume is absent", async () => {
+    const kwStore = new (await import("../../packages/bridge/src/store")).OutputStore();
+    const kwServer = (await import("../../packages/bridge/src/server")).createServer(
+      kwStore,
+      { masterResumePath: "/nonexistent/resume-master.tex" },
+    );
+    await new Promise<void>((r) => kwServer.listen(0, r));
+    const addr = kwServer.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
+
+    const res = await fetch(`http://127.0.0.1:${port}/resume/keywords`);
+    expect(res.status).toBe(404);
+
+    await new Promise<void>((r) => kwServer.close(() => r()));
+  });
 });

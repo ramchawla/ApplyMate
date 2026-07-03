@@ -34,6 +34,19 @@ export async function fetchLatestOutput(): Promise<unknown | null> {
   }
 }
 
+export async function fetchResumeKeywords(): Promise<string[] | null> {
+  try {
+    const res = await fetch(`${BRIDGE_BASE}/resume/keywords`, {
+      headers: await authHeaders(),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { keywords?: string[] };
+    return Array.isArray(body.keywords) ? body.keywords : null;
+  } catch {
+    return null; // bridge not running
+  }
+}
+
 export async function isBridgeUp(): Promise<boolean> {
   try {
     const res = await fetch(`${BRIDGE_BASE}/health`);
