@@ -13,8 +13,13 @@ non-negotiable validation. Never bypass the validator.
 - Job description, job title, company, job URL.
 - Detected form fields (from the extension).
 - Optional manual context from the user.
-- Experience corpus at `~/.applymate/experience.yaml`.
-- Resume template at `~/.applymate/resume-template.tex`.
+- Experience corpus at `~/.applymate/experience.yaml` (anchors + `not_done`
+  honesty guardrails — never claim anything listed under `not_done`).
+- Resume template at `~/.applymate/resume-template.tex` (carries the
+  `%%BULLETS%%` marker; full source of truth at `~/.applymate/resume-master.tex`).
+- Audience directives at `~/.applymate/generation-directives.md` — detect the
+  target audience (FAANG / startup / enterprise-finance / AI-ML / platform) from
+  the company + JD and bias arc ordering, metric framing, and tone accordingly.
 
 ## Flow
 
