@@ -54,8 +54,12 @@ describe("parseManualResponse", () => {
     expect(parsed.bullets).toHaveLength(1);
   });
 
-  it("rejects a response without bullets", () => {
-    const bad = JSON.stringify({ ...response(), bullets: [] });
+  it("rejects a response without bullets or guidance", () => {
+    const bad = JSON.stringify({
+      ...response(),
+      bullets: [],
+      formFieldGuidance: [],
+    });
     expect(() => parseManualResponse(bad)).toThrow(/bullets/);
   });
 
@@ -121,5 +125,51 @@ describe("processManualResponse", () => {
     );
     const bullet = output.rewritingReport.perBullet[0];
     expect(bullet.invariantChecksPassed).toBe(false);
+  });
+});
+
+describe("answers-only flow", () => {
+  it("accepts empty bullets when formFieldGuidance is present", () => {
+    const raw = JSON.stringify(response({ bullets: [] }));
+    const parsed = parseManualResponse(raw);
+    expect(parsed.bullets).toHaveLength(0);
+    expect(parsed.formFieldGuidance).toHaveLength(1);
+  });
+
+  it("rejects a response with neither bullets nor formFieldGuidance", () => {
+    const raw = JSON.stringify(
+      response({ bullets: [], formFieldGuidance: [] }),
+    );
+    expect(() => parseManualResponse(raw)).toThrow(/answers-only/);
+  });
+
+  it("flags answers claiming skills not in the corpus", async () => {
+    const r = response({
+      bullets: [],
+      formFieldGuidance: [
+        {
+          fieldId: "whyq",
+          suggestedAnswer:
+            "I have deep Kubernetes and Terraform production experience.",
+        },
+      ],
+    });
+    const { output } = await processManualResponse(r, anchors, template);
+    const joined = output.rewritingReport.warnings.join(" ");
+    expect(joined).toContain("whyq");
+    expect(joined).toContain("kubernetes");
+  });
+
+  it("does not flag answers grounded in corpus skills", async () => {
+    const r = response({
+      bullets: [],
+      formFieldGuidance: [
+        { fieldId: "whyq", suggestedAnswer: "I write async Rust services." },
+      ],
+    });
+    const { output } = await processManualResponse(r, anchors, template);
+    expect(
+      output.rewritingReport.warnings.filter((w) => w.includes("whyq")),
+    ).toHaveLength(0);
   });
 });

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { fetchLatestOutput } from "../../utils/bridge";
 import { BridgeTokenField } from "./BridgeTokenField";
 import { BridgeStatus } from "./BridgeStatus";
-import { buildManualPrompt } from "../../lib/manual-prompt";
+import { buildManualPrompt, buildQuestionsPrompt } from "../../lib/manual-prompt";
+import { KeywordGap } from "./KeywordGap";
 import type { ExtractedJobData } from "../../types";
 
 interface BulletView {
@@ -35,13 +36,21 @@ export function TailoringReview({ jobData, onProceed }: Props) {
   const [output, setOutput] = useState<OutputView | null>(null);
   const [acceptedRisky, setAcceptedRisky] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"full" | "questions" | null>(null);
 
-  async function copyPrompt() {
-    await navigator.clipboard.writeText(buildManualPrompt(jobData));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+  async function copyPrompt(kind: "full" | "questions") {
+    const prompt =
+      kind === "full"
+        ? buildManualPrompt(jobData)
+        : buildQuestionsPrompt(jobData);
+    await navigator.clipboard.writeText(prompt);
+    setCopied(kind);
+    setTimeout(() => setCopied(null), 2500);
   }
+
+  const hasCustomQuestions = jobData.formFields.some(
+    (f) => (f.userSelectedValueType ?? f.extractedValueType) === "custom-q",
+  );
 
   useEffect(() => {
     let active = true;
@@ -63,6 +72,7 @@ export function TailoringReview({ jobData, onProceed }: Props) {
   if (loading || !output) {
     return (
       <div className="p-4 text-sm space-y-3">
+        <KeywordGap jobDescription={jobData.jobDescription} />
         <div>Waiting for tailored resume…</div>
         <div className="text-xs text-gray-500">
           Option A — Claude Code: run <code>/apply-to-job</code> with the
@@ -76,11 +86,21 @@ export function TailoringReview({ jobData, onProceed }: Props) {
             <code>pnpm skill:manual response.json</code>.
           </div>
           <button
-            onClick={() => void copyPrompt()}
+            onClick={() => void copyPrompt("full")}
             className="w-full bg-gray-700 text-white py-1 rounded"
           >
-            {copied ? "Copied ✓" : "Copy Claude prompt"}
+            {copied === "full" ? "Copied ✓" : "Copy Claude prompt"}
           </button>
+          {hasCustomQuestions && (
+            <button
+              onClick={() => void copyPrompt("questions")}
+              className="w-full bg-gray-500 text-white py-1 rounded"
+            >
+              {copied === "questions"
+                ? "Copied ✓"
+                : "Copy questions-only prompt (no resume regen)"}
+            </button>
+          )}
         </div>
         <BridgeStatus />
         <BridgeTokenField />

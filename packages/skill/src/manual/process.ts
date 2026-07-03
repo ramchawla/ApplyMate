@@ -6,6 +6,7 @@ import { validateRewrite } from "../stages/rewrite";
 import { assembleLatex } from "../stages/assemble-latex";
 import { assembleCoverLetter } from "../stages/cover-letter";
 import { composeOutput } from "../index";
+import { extractTechKeywords } from "../../../../lib/shared/keywords";
 
 // The JSON the user pastes back from Claude (browser, Pro subscription).
 // The LLM only proposes; every candidate still goes through the same
@@ -50,8 +51,16 @@ export function parseManualResponse(raw: string): ManualLLMResponse {
       "Response JSON must include job.company, job.jobTitle, job.jobDescription.",
     );
   }
-  if (!Array.isArray(r.bullets) || r.bullets.length === 0) {
-    throw new Error("Response JSON must include a non-empty bullets array.");
+  // Bullets may be empty for the answers-only flow (custom-question drafts
+  // without a resume regen) — but then formFieldGuidance must carry content.
+  if (!Array.isArray(r.bullets)) r.bullets = [];
+  if (
+    r.bullets.length === 0 &&
+    (!Array.isArray(r.formFieldGuidance) || r.formFieldGuidance.length === 0)
+  ) {
+    throw new Error(
+      "Response JSON must include bullets, or formFieldGuidance for the answers-only flow.",
+    );
   }
   for (const b of r.bullets) {
     if (
@@ -97,6 +106,22 @@ export async function processManualResponse(
     topExperiences: retrieved.slice(0, 5),
   });
 
+  // Answers get the same grounding scrutiny as bullets: any tech claim in a
+  // suggested answer must be backed by a corpus anchor, or it's flagged.
+  const corpusSkills = new Set(
+    anchors.flatMap((a) => a.skills.map((s) => s.toLowerCase())),
+  );
+  const answerWarnings = (response.formFieldGuidance ?? []).flatMap((g) => {
+    const unsupported = extractTechKeywords(g.suggestedAnswer).filter(
+      (k) => !corpusSkills.has(k),
+    );
+    return unsupported.length > 0
+      ? [
+          `Answer for "${g.fieldId}" claims skills not in corpus: ${unsupported.join(", ")}`,
+        ]
+      : [];
+  });
+
   const output = composeOutput({
     parsedJD,
     retrieved,
@@ -111,6 +136,7 @@ export async function processManualResponse(
     reasoning:
       "Manual LLM path: candidate rewrites pasted from Claude (browser), validated locally.",
   });
+  output.rewritingReport.warnings.push(...answerWarnings);
 
   return { output, job: response.job };
 }

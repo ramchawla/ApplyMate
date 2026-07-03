@@ -6,14 +6,18 @@ import type { ExtractedJobData } from "../types";
 // JSON reply to a file for `pnpm skill:manual <file>`. The local CLI re-runs
 // the anti-hallucination validators on everything the LLM proposes, so this
 // prompt is guidance, not the safeguard.
-export function buildManualPrompt(data: ExtractedJobData): string {
-  const customQuestions = data.formFields
+function customQuestionList(data: ExtractedJobData): string {
+  return data.formFields
     .filter(
       (f) =>
         (f.userSelectedValueType ?? f.extractedValueType) === "custom-q",
     )
     .map((f) => `- fieldId: "${f.id}" — ${f.label}`)
     .join("\n");
+}
+
+export function buildManualPrompt(data: ExtractedJobData): string {
+  const customQuestions = customQuestionList(data);
 
   return `You are tailoring a resume for a specific job. Follow every rule exactly.
 
@@ -68,6 +72,54 @@ OUTPUT — reply with ONLY this JSON (no prose, no code fence):
     }
   ],
   "coverLetterParagraphs": ["<paragraph 1>", "<paragraph 2>"],
+  "formFieldGuidance": [
+    { "fieldId": "<fieldId from above>", "suggestedAnswer": "<answer>" }
+  ]
+}`;
+}
+
+// Answers-only variant: draft custom-question answers without a resume regen.
+// Same manual flow (`pnpm skill:manual <file>`); the local validator flags any
+// tech claim in an answer that the corpus doesn't back.
+export function buildQuestionsPrompt(data: ExtractedJobData): string {
+  const customQuestions = customQuestionList(data);
+
+  return `You are drafting short answers to job application questions. Follow every rule exactly.
+
+JOB
+- Title: ${data.jobTitle}
+- Company: ${data.company}
+- URL: ${data.url}
+
+JOB DESCRIPTION
+"""
+${data.jobDescription}
+"""
+
+APPLICATION FORM QUESTIONS (answer each)
+${customQuestions || "- (no custom questions detected — answer nothing)"}
+
+MY EXPERIENCE CORPUS (paste the full contents of ~/.applymate/experience.yaml below)
+"""
+<PASTE experience.yaml HERE>
+"""
+
+RULES (non-negotiable — a local validator re-checks all of them)
+1. Ground every claim in the experience corpus. Never invent skills, projects,
+   employers, or metrics.
+2. Keep each answer under 120 words, specific, and free of clichés.
+3. Never claim anything listed under "not_done" in the corpus.
+
+OUTPUT — reply with ONLY this JSON (no prose, no code fence):
+{
+  "job": {
+    "company": ${JSON.stringify(data.company)},
+    "jobTitle": ${JSON.stringify(data.jobTitle)},
+    "jobUrl": ${JSON.stringify(data.url)},
+    "jobDescription": <the full job description above, as a JSON string>
+  },
+  "bullets": [],
+  "coverLetterParagraphs": [],
   "formFieldGuidance": [
     { "fieldId": "<fieldId from above>", "suggestedAnswer": "<answer>" }
   ]
