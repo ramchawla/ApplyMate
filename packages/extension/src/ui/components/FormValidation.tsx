@@ -1,20 +1,13 @@
 import { useState } from "react";
 import { FormField } from "../../types";
+import { VALUE_TYPES } from "../../../../../lib/shared/constants";
 
 interface Props {
   fields: FormField[];
   onProceed: (validatedFields: FormField[]) => void;
 }
 
-const VALUE_TYPE_OPTIONS = [
-  "name",
-  "email",
-  "phone",
-  "resume",
-  "cover-letter",
-  "custom-q",
-  "unknown",
-] as const;
+const VALUE_TYPE_OPTIONS = VALUE_TYPES;
 
 export function FormValidation({ fields: initialFields, onProceed }: Props) {
   const [fields, setFields] = useState<FormField[]>(

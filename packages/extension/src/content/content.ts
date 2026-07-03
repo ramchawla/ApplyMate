@@ -91,7 +91,11 @@ if (inExtension) {
       return false;
     }
     if (request?.type === "APPLY_FILL_PLAN") {
-      const result = applyFillPlan(request.instructions, document);
+      const result = applyFillPlan(
+        request.instructions,
+        document,
+        request.highlightFieldIds ?? [],
+      );
       sendResponse(result);
       return false;
     }

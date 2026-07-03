@@ -82,9 +82,17 @@ function App() {
       {state.currentTab === "form-validation" && (
         <FormValidation
           fields={data.formFields}
-          onProceed={() =>
-            setState((prev) => ({ ...prev, currentTab: "tailoring-review" }))
-          }
+          onProceed={(validatedFields) => {
+            // Keep the user's per-field type corrections — the fill plan is
+            // built from these, so dropping them would undo the validation.
+            const updated = { ...data, formFields: validatedFields };
+            void updateExtractedJobData(updated);
+            setState((prev) => ({
+              ...prev,
+              extractedJobData: updated,
+              currentTab: "tailoring-review",
+            }));
+          }}
         />
       )}
       {state.currentTab === "tailoring-review" && (
