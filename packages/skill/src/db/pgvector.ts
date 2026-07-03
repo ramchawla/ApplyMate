@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import pg from "pg";
 import pgvector from "pgvector/pg";
 import { embedBatch } from "../embeddings/embedder";
+import { anchorEmbeddingText } from "../corpus/load";
 import type { ExperienceAnchor } from "../types";
 
 const { Client } = pg;
@@ -32,10 +33,7 @@ export async function upsertAnchors(
   anchors: ExperienceAnchor[],
 ): Promise<void> {
   if (anchors.length === 0) return;
-  const texts = anchors.map(
-    (a) =>
-      `${a.title}. ${a.description} ${a.skills.join(" ")} ${a.tags.join(" ")}`,
-  );
+  const texts = anchors.map(anchorEmbeddingText);
   const vectors = await embedBatch(texts);
 
   for (let i = 0; i < anchors.length; i++) {
