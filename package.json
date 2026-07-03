@@ -11,6 +11,7 @@
     "test": "pnpm --filter @applymate/extension test",
     "test:extension": "pnpm --filter @applymate/extension test",
     "test:skill": "pnpm --filter @applymate/skill test",
+    "skill:manual": "pnpm --filter @applymate/skill manual",
     "type-check": "pnpm --filter @applymate/extension type-check",
     "type-check:skill": "pnpm --filter @applymate/skill type-check",
     "skill:db:up": "pnpm --filter @applymate/skill db:up",

@@ -42,3 +42,7 @@ export { assembleCoverLetter } from "./stages/cover-letter";
 export { loadCorpus } from "./corpus/load";
 export { connect, migrate, upsertAnchors, knnSearch } from "./db/pgvector";
 export { embed, embedBatch } from "./embeddings/embedder";
+export {
+  parseManualResponse,
+  processManualResponse,
+} from "./manual/process";

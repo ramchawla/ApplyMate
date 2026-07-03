@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { fetchLatestOutput } from "../../utils/bridge";
 import { BridgeTokenField } from "./BridgeTokenField";
 import { BridgeStatus } from "./BridgeStatus";
+import { buildManualPrompt } from "../../lib/manual-prompt";
+import type { ExtractedJobData } from "../../types";
 
 interface BulletView {
   original: string;
@@ -25,13 +27,21 @@ interface OutputView {
 }
 
 interface Props {
+  jobData: ExtractedJobData;
   onProceed: (output: OutputView) => void;
 }
 
-export function TailoringReview({ onProceed }: Props) {
+export function TailoringReview({ jobData, onProceed }: Props) {
   const [output, setOutput] = useState<OutputView | null>(null);
   const [acceptedRisky, setAcceptedRisky] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  async function copyPrompt() {
+    await navigator.clipboard.writeText(buildManualPrompt(jobData));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
 
   useEffect(() => {
     let active = true;
@@ -53,10 +63,24 @@ export function TailoringReview({ onProceed }: Props) {
   if (loading || !output) {
     return (
       <div className="p-4 text-sm space-y-3">
-        <div>Waiting for tailored resume from Claude Code…</div>
+        <div>Waiting for tailored resume…</div>
         <div className="text-xs text-gray-500">
-          Run <code>/apply-to-job</code> and ensure the bridge is running
-          (<code>pnpm bridge</code>).
+          Option A — Claude Code: run <code>/apply-to-job</code> with the
+          bridge running (<code>pnpm bridge</code>).
+        </div>
+        <div className="text-xs text-gray-500 space-y-1">
+          <div>
+            Option B — Claude in the browser (Pro subscription, no API): copy
+            the prompt, paste it into claude.ai with your corpus + bullets,
+            save the JSON reply, then run{" "}
+            <code>pnpm skill:manual response.json</code>.
+          </div>
+          <button
+            onClick={() => void copyPrompt()}
+            className="w-full bg-gray-700 text-white py-1 rounded"
+          >
+            {copied ? "Copied ✓" : "Copy Claude prompt"}
+          </button>
         </div>
         <BridgeStatus />
         <BridgeTokenField />

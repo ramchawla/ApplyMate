@@ -97,6 +97,7 @@ function App() {
       )}
       {state.currentTab === "tailoring-review" && (
         <TailoringReview
+          jobData={data}
           onProceed={(output) =>
             setState((prev) => ({
               ...prev,
