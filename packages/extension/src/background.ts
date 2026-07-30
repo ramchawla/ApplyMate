@@ -44,6 +44,20 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       sendResponse({ status: "side_panel_opened" });
       return false;
 
+    case "REQUEST_REEXTRACT":
+      // Side panel asks for a fresh extraction once it is open. The page DOM
+      // has usually settled by now (SPA forms rendered), so this catches form
+      // fields the one-shot document_idle pass may have missed.
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const tabId = tabs[0]?.id;
+        if (tabId === undefined) return;
+        chrome.tabs.sendMessage(tabId, { type: "EXTRACT_JOB_DATA" }, () => {
+          void chrome.runtime.lastError; // ignore if no content script on page
+        });
+      });
+      sendResponse({ status: "reextract_requested" });
+      return false;
+
     case "GET_EXTRACTED_DATA":
       chrome.storage.session.get("lastExtractedJobData", (result) => {
         sendResponse({ data: result.lastExtractedJobData ?? null });

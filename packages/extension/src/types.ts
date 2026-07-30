@@ -36,6 +36,9 @@ export interface Profile {
   linkedin: string;
   github: string;
   website: string;
+  location: string;
+  workAuthorization: string;
+  salaryExpectation: string;
 }
 
 export interface FillInstruction {
@@ -53,4 +56,5 @@ export interface FillPlan {
 export interface ApplyFillPlanMessage {
   type: "APPLY_FILL_PLAN";
   instructions: FillInstruction[];
+  highlightFieldIds?: string[];
 }

@@ -1,13 +1,19 @@
 import { createServer as createHttpServer, type Server } from "node:http";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { OutputStore } from "./store";
 import type { Db } from "../../../lib/local/db";
 import { persistOutput } from "./persist";
+import { extractTechKeywords } from "../../../lib/shared/keywords";
 
 export interface ServerOptions {
   // When set, /output and /output/latest require `Authorization: Bearer <token>`.
   token?: string;
   // When set, each posted output is persisted to SQLite.
   db?: Db;
+  // Override for tests; defaults to ~/.applymate/resume-master.tex.
+  masterResumePath?: string;
 }
 
 // Reflect CORS only for the extension origin. A localhost bridge holding the
@@ -70,6 +76,20 @@ export function createServer(
 
     if (req.method === "GET" && url === "/output/latest") {
       return send(200, store.getLatest());
+    }
+
+    // Tech keywords found in the master resume — the extension diffs these
+    // against the JD's keywords to show the coverage gap before tailoring.
+    if (req.method === "GET" && url === "/resume/keywords") {
+      const path =
+        options.masterResumePath ??
+        join(homedir(), ".applymate", "resume-master.tex");
+      try {
+        const tex = readFileSync(path, "utf8");
+        return send(200, { keywords: extractTechKeywords(tex) });
+      } catch {
+        return send(404, { error: "master resume not found", path });
+      }
     }
 
     if (req.method === "POST" && url === "/output") {

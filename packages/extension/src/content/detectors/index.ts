@@ -1,6 +1,13 @@
 import { DetectionResult } from "../../../../../lib/shared/types";
 import { detectLinkedIn } from "./linkedin";
 import { detectIndeed } from "./indeed";
+import { detectGreenhouse } from "./greenhouse";
+import { detectLever } from "./lever";
+import { detectAshby } from "./ashby";
+import { detectWorkday } from "./workday";
+import { detectIcims } from "./icims";
+import { detectWorkable } from "./workable";
+import { detectSmartRecruiters } from "./smartrecruiters";
 import { detectGeneric } from "./generic";
 
 export interface DetectionInput {
@@ -9,11 +16,20 @@ export interface DetectionInput {
 }
 
 export function detect(input: DetectionInput): DetectionResult {
-  let result = detectLinkedIn(input);
-  if (result.confidence > 0.7) return result;
-
-  result = detectIndeed(input);
-  if (result.confidence > 0.7) return result;
-
+  const boards = [
+    detectLinkedIn,
+    detectIndeed,
+    detectGreenhouse,
+    detectLever,
+    detectAshby,
+    detectWorkday,
+    detectIcims,
+    detectWorkable,
+    detectSmartRecruiters,
+  ];
+  for (const fn of boards) {
+    const result = fn(input);
+    if (result.confidence > 0.7) return result;
+  }
   return detectGeneric(input);
 }

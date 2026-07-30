@@ -22,6 +22,9 @@ export function ProfileEditor({ onSaved }: Props) {
     "linkedin",
     "github",
     "website",
+    "location",
+    "workAuthorization",
+    "salaryExpectation",
   ];
 
   return (

@@ -13,8 +13,13 @@ non-negotiable validation. Never bypass the validator.
 - Job description, job title, company, job URL.
 - Detected form fields (from the extension).
 - Optional manual context from the user.
-- Experience corpus at `~/.applymate/experience.yaml`.
-- Resume template at `~/.applymate/resume-template.tex`.
+- Experience corpus at `~/.applymate/experience.yaml` (anchors + `not_done`
+  honesty guardrails — never claim anything listed under `not_done`).
+- Resume template at `~/.applymate/resume-template.tex` (carries the
+  `%%BULLETS%%` marker; full source of truth at `~/.applymate/resume-master.tex`).
+- Audience directives at `~/.applymate/generation-directives.md` — detect the
+  target audience (FAANG / startup / enterprise-finance / AI-ML / platform) from
+  the company + JD and bias arc ordering, metric framing, and tone accordingly.
 
 ## Flow
 
@@ -23,9 +28,12 @@ non-negotiable validation. Never bypass the validator.
    keywords it missed from your own reading. Keep keywords lowercased.
 
 2. **Stage 2 — Retrieve (code).**
-   Ensure the corpus is loaded and embedded into pgvector (`loadCorpus`,
-   `upsertAnchors`). Call `retrieve(client, parsedJD, anchors, k=8)`. These
-   ranked experiences are your evidence base.
+   Load the corpus (`loadCorpus`). If the local Postgres+pgvector container is
+   running, embed with `upsertAnchors` and call
+   `retrieve(client, parsedJD, anchors, k=8)`. If it is not (the common case),
+   call `retrieveInMemory(parsedJD, anchors, k=8)` — same local embeddings,
+   same ranking, no database needed. These ranked experiences are your
+   evidence base.
 
 3. **Stage 3 — Rewrite (you propose, code validates).**
    For each resume bullet, propose a `RewriteCandidate`: the revised text,

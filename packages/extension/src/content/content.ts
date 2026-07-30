@@ -79,10 +79,49 @@ const inExtension =
   !!chrome.runtime &&
   !!(chrome.runtime as { onMessage?: unknown }).onMessage;
 
+// Multi-step ATS wizards (LinkedIn Easy Apply, Workday) inject new fields
+// after the initial snapshot; re-extract when form controls appear.
+const REEXTRACT_DEBOUNCE_MS = 400;
+
+export function watchForInjectedFields(
+  doc: Document,
+  onFieldsChanged: () => void,
+): MutationObserver {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const observer = new MutationObserver((mutations) => {
+    const addedFormControls = mutations.some((m) =>
+      Array.from(m.addedNodes).some(
+        (node) =>
+          node instanceof Element &&
+          (node.matches("input, textarea, select, form") ||
+            node.querySelector?.("input, textarea, select") !== null),
+      ),
+    );
+    if (!addedFormControls) return;
+
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(onFieldsChanged, REEXTRACT_DEBOUNCE_MS);
+  });
+
+  observer.observe(doc.body, { childList: true, subtree: true });
+
+  doc.defaultView?.addEventListener("pagehide", () => {
+    if (timer !== undefined) clearTimeout(timer);
+    observer.disconnect();
+  });
+
+  return observer;
+}
+
 if (inExtension) {
   console.log("[ApplyMate] Content script loaded on:", getUrl());
 
   void extractAndSend(document.documentElement.outerHTML);
+
+  watchForInjectedFields(document, () => {
+    void extractAndSend(document.documentElement.outerHTML);
+  });
 
   chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     if (request?.type === "EXTRACT_JOB_DATA") {
@@ -91,7 +130,11 @@ if (inExtension) {
       return false;
     }
     if (request?.type === "APPLY_FILL_PLAN") {
-      const result = applyFillPlan(request.instructions, document);
+      const result = applyFillPlan(
+        request.instructions,
+        document,
+        request.highlightFieldIds ?? [],
+      );
       sendResponse(result);
       return false;
     }

@@ -58,4 +58,75 @@ describe("Board Detection", () => {
     expect(result.board).toBe("unknown");
     expect(result.confidence).toBe(0);
   });
+
+  it("detects Greenhouse from URL", () => {
+    const r = detect({
+      url: "https://boards.greenhouse.io/acme/jobs/123",
+      html: "",
+    });
+    expect(r.board).toBe("greenhouse");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("detects Lever from URL", () => {
+    const r = detect({ url: "https://jobs.lever.co/acme/abc", html: "" });
+    expect(r.board).toBe("lever");
+  });
+
+  it("detects Ashby from URL", () => {
+    const r = detect({ url: "https://jobs.ashby.com/acme/xyz", html: "" });
+    expect(r.board).toBe("ashby");
+  });
+
+  it("detects Workday from URL", () => {
+    const r = detect({
+      url: "https://acme.wd1.myworkdayjobs.com/en-US/careers/job/123",
+      html: "",
+    });
+    expect(r.board).toBe("workday");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("detects iCIMS from URL", () => {
+    const r = detect({
+      url: "https://careers-acme.icims.com/jobs/1234/software-engineer/job",
+      html: "",
+    });
+    expect(r.board).toBe("icims");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("detects Workable from URL", () => {
+    const r = detect({
+      url: "https://apply.workable.com/acme/j/ABCDEF1234/",
+      html: "",
+    });
+    expect(r.board).toBe("workable");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("detects SmartRecruiters from URL", () => {
+    const r = detect({
+      url: "https://jobs.smartrecruiters.com/Acme/744000000000000-engineer",
+      html: "",
+    });
+    expect(r.board).toBe("smartrecruiters");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it("detects a generic job page via JSON-LD JobPosting", () => {
+    const html =
+      '<script type="application/ld+json">' +
+      JSON.stringify({
+        "@type": "JobPosting",
+        title: "Backend Engineer",
+        hiringOrganization: { name: "Acme Corp" },
+        description: "<p>Build services in Rust.</p>",
+      }) +
+      "</script>";
+    const r = detect({ url: "https://jobs.unknown-ats.io/posting/9", html });
+    expect(r.board).toBe("generic");
+    expect(r.confidence).toBeGreaterThanOrEqual(0.7);
+    expect(r.method).toBe("dom_structure");
+  });
 });

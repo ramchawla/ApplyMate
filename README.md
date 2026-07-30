@@ -13,6 +13,9 @@ End-to-end AI job application agent across Chrome MV3 extension + Next.js dashbo
 ```bash
 pnpm install
 
+# PDF compile prerequisite (one-time)
+brew install tectonic
+
 # 1. Vector DB (Docker) for the skill
 pnpm skill:db:up
 
@@ -695,13 +698,9 @@ This project demonstrates:
 
 **"Compiled LaTeX to PDF client-side via Tectonic-WASM with zero server cost; built a portal abstraction layer with heuristic-plus-LLM form auto-fill."**
 
-✅ **Client-side LaTeX→PDF via WASM** — the SwiftLaTeX PdfTeX engine is
-self-hosted under the dashboard's `public/swiftlatex/` and loads + runs pdfTeX
-in the browser (verified: real pdfTeX 0.3.0 executes client-side). Producing a
-finished PDF additionally requires SwiftLaTeX's TeX format file and TeXLive
-package assets; vendoring those for fully-offline compile is a known follow-up.
-Until then the dashboard offers the LaTeX for download (the "Tectonic-WASM"
-résumé wording; SwiftLaTeX is the browser-packaged engine).
+✅ **LaTeX→PDF compile service** — the Next.js dashboard exposes a Node
+`/api/compile` route that shells to **Tectonic** to render résumé LaTeX to PDF
+locally (zero external service cost). Install once with `brew install tectonic`.
 ✅ **Zero server cost** — all processing local
 ✅ **Portal abstraction** — Next.js dashboard managing applications + resume versions
 ✅ **Heuristic-plus-LLM** — form field detection (heuristic) + LLM-guided answers (LLM)

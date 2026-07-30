@@ -56,4 +56,57 @@ describe("JD Extraction", () => {
     expect(result.jobDescription).not.toContain("color:red");
     expect(result.jobDescription).toContain("Real job content");
   });
+
+  it("prefers JSON-LD JobPosting when present", () => {
+    const html =
+      "<h1>Wrong Heading</h1>" +
+      '<script type="application/ld+json">' +
+      JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        title: "Staff Platform Engineer",
+        hiringOrganization: { "@type": "Organization", name: "Globex" },
+        description: "<p>Own the &amp; build pipeline.</p>",
+      }) +
+      "</script>";
+
+    const result = extractJD(html, "generic");
+
+    expect(result.jobTitle).toBe("Staff Platform Engineer");
+    expect(result.company).toBe("Globex");
+    expect(result.jobDescription).toContain("Own the & build pipeline.");
+  });
+
+  it("finds JobPosting inside a JSON-LD @graph array", () => {
+    const html =
+      '<script type="application/ld+json">' +
+      JSON.stringify({
+        "@graph": [
+          { "@type": "WebSite", name: "Careers" },
+          {
+            "@type": "JobPosting",
+            title: "Data Engineer",
+            hiringOrganization: "Initech",
+            description: "ETL things.",
+          },
+        ],
+      }) +
+      "</script>";
+
+    const result = extractJD(html, "generic");
+
+    expect(result.jobTitle).toBe("Data Engineer");
+    expect(result.company).toBe("Initech");
+  });
+
+  it("ignores malformed JSON-LD and falls back to heuristics", () => {
+    const html =
+      '<script type="application/ld+json">{not valid json</script>' +
+      "<h1>Fallback Title</h1><p>Company: FallbackCo</p><div>Body text</div>";
+
+    const result = extractJD(html, "generic");
+
+    expect(result.jobTitle).toContain("Fallback Title");
+    expect(result.company).toContain("FallbackCo");
+  });
 });

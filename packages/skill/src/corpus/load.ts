@@ -12,6 +12,12 @@ interface RawExperience {
   claim_anchor: string;
 }
 
+// Canonical text an anchor is embedded under — pgvector and the in-memory
+// fallback must embed identical strings or their rankings diverge.
+export function anchorEmbeddingText(a: ExperienceAnchor): string {
+  return `${a.title}. ${a.description} ${a.skills.join(" ")} ${a.tags.join(" ")}`;
+}
+
 export async function loadCorpus(path: string): Promise<ExperienceAnchor[]> {
   let raw: string;
   try {

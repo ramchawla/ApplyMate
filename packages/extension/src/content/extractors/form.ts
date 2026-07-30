@@ -48,12 +48,20 @@ function parseFormField(
 
   const { valueType, confidence } = inferFieldType(label, placeholder, type);
 
+  const options =
+    tagName === "select"
+      ? Array.from((element as HTMLSelectElement).options).map((o) =>
+          o.text.trim(),
+        )
+      : undefined;
+
   return {
     id,
     label,
     type,
     placeholder,
     required,
+    options,
     extractedValueType: valueType,
     matchConfidence: confidence,
     validated: false,

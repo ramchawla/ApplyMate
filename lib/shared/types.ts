@@ -15,12 +15,21 @@ export interface FormField {
   required: boolean;
   extractedValueType?:
     | "name"
+    | "first-name"
+    | "last-name"
     | "email"
     | "phone"
+    | "linkedin"
+    | "github"
+    | "website"
+    | "location"
+    | "work-auth"
+    | "salary"
     | "resume"
     | "cover-letter"
     | "custom-q"
     | null;
+  options?: string[];
   matchConfidence: number;
   userSelectedValueType?: string;
   userProvidedValue?: string;
@@ -34,6 +43,10 @@ export interface DetectionResult {
     | "greenhouse"
     | "lever"
     | "ashby"
+    | "workday"
+    | "icims"
+    | "workable"
+    | "smartrecruiters"
     | "generic"
     | "unknown";
   confidence: number;

@@ -35,10 +35,14 @@ export function composeOutput(input: ComposeInput): ApplyJobOutput {
 }
 
 export { parseJD } from "./stages/parse-jd";
-export { retrieve } from "./stages/retrieve";
+export { retrieve, retrieveInMemory } from "./stages/retrieve";
 export { validateRewrite, buildReport } from "./stages/rewrite";
 export { assembleLatex } from "./stages/assemble-latex";
 export { assembleCoverLetter } from "./stages/cover-letter";
 export { loadCorpus } from "./corpus/load";
 export { connect, migrate, upsertAnchors, knnSearch } from "./db/pgvector";
 export { embed, embedBatch } from "./embeddings/embedder";
+export {
+  parseManualResponse,
+  processManualResponse,
+} from "./manual/process";

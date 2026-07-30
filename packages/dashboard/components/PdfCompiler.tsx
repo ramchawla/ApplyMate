@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { compileInBrowser } from "../../../lib/local/latex-wasm";
 
 export function PdfCompiler({ latex }: { latex: string }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -11,10 +10,22 @@ export function PdfCompiler({ latex }: { latex: string }) {
     setBusy(true);
     setError(null);
     try {
-      const blob = await compileInBrowser(latex);
+      const res = await fetch("/api/compile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ latex }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          [body.error, body.hint].filter(Boolean).join(" — ") ||
+            `compile failed (${res.status})`,
+        );
+      }
+      const blob = await res.blob();
       setUrl(URL.createObjectURL(blob));
     } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -27,17 +38,16 @@ export function PdfCompiler({ latex }: { latex: string }) {
         disabled={busy}
         className="bg-blue-600 text-white px-3 py-1 rounded text-sm disabled:bg-gray-400"
       >
-        {busy ? "Compiling…" : "Compile PDF (client-side)"}
+        {busy ? "Compiling…" : "Compile PDF"}
       </button>
 
       {error && (
         <div className="space-y-1">
           <pre className="text-xs text-red-600 whitespace-pre-wrap">{error}</pre>
           <p className="text-xs text-gray-500">
-            The SwiftLaTeX WASM engine runs in your browser, but a full compile
-            also needs its TeX format + package assets hosted under{" "}
-            <code>/swiftlatex</code> (or its TeXLive endpoint). Until those are
-            vendored, copy the Raw LaTeX below into Overleaf to produce the PDF.
+            Needs <code>tectonic</code> on the machine running the dashboard
+            (<code>brew install tectonic</code>). The Raw LaTeX below can be
+            compiled at Overleaf as a fallback.
           </p>
         </div>
       )}

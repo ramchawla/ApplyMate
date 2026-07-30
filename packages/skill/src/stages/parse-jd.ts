@@ -1,11 +1,5 @@
 import type { ParsedJD } from "../types";
-
-const TECH_TERMS = [
-  "rust", "go", "golang", "python", "typescript", "javascript", "java",
-  "c++", "postgresql", "postgres", "mysql", "redis", "docker", "kubernetes",
-  "aws", "gcp", "graphql", "rest", "async", "concurrency", "react", "node",
-  "wasm", "latex", "pgvector", "llm", "tectonic",
-];
+import { extractTechKeywords } from "../../../../lib/shared/keywords";
 
 const SENIORITY_MAP: { re: RegExp; level: ParsedJD["seniority"] }[] = [
   { re: /\bstaff\b|\bprincipal\b/i, level: "staff" },
@@ -15,11 +9,7 @@ const SENIORITY_MAP: { re: RegExp; level: ParsedJD["seniority"] }[] = [
 ];
 
 export function parseJD(jobDescription: string): ParsedJD {
-  const text = jobDescription.toLowerCase();
-
-  const keywords = Array.from(
-    new Set(TECH_TERMS.filter((t) => text.includes(t))),
-  );
+  const keywords = extractTechKeywords(jobDescription);
 
   let seniority: ParsedJD["seniority"] = "unknown";
   for (const { re, level } of SENIORITY_MAP) {

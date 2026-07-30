@@ -7,6 +7,9 @@ const EMPTY: Profile = {
   linkedin: "",
   github: "",
   website: "",
+  location: "",
+  workAuthorization: "",
+  salaryExpectation: "",
 };
 
 export function getProfile(): Promise<Profile> {

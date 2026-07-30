@@ -9,6 +9,9 @@ const profile: Profile = {
   linkedin: "linkedin.com/in/jane",
   github: "github.com/jane",
   website: "jane.dev",
+  location: "New York, NY",
+  workAuthorization: "US Citizen",
+  salaryExpectation: "$180,000",
 };
 
 function field(partial: Partial<FormField>): FormField {
@@ -88,6 +91,37 @@ describe("buildFillPlan", () => {
     );
     expect(plan.unmappedFieldIds).toContain("weird");
     expect(plan.instructions).toHaveLength(0);
+  });
+
+  it("maps split first/last name, links, location, work auth, salary", () => {
+    const plan = buildFillPlan(
+      [
+        field({ id: "fn", extractedValueType: "first-name" }),
+        field({ id: "ln", extractedValueType: "last-name" }),
+        field({ id: "li", extractedValueType: "linkedin" }),
+        field({ id: "gh", extractedValueType: "github" }),
+        field({ id: "web", extractedValueType: "website" }),
+        field({ id: "loc", extractedValueType: "location" }),
+        field({ id: "wa", extractedValueType: "work-auth" }),
+        field({ id: "sal", extractedValueType: "salary" }),
+      ],
+      profile,
+      output,
+    );
+    const byId = Object.fromEntries(
+      plan.instructions.map((i) => [i.fieldId, i.value]),
+    );
+    expect(byId).toEqual({
+      fn: "Jane",
+      ln: "Dev",
+      li: "linkedin.com/in/jane",
+      gh: "github.com/jane",
+      web: "jane.dev",
+      loc: "New York, NY",
+      wa: "US Citizen",
+      sal: "$180,000",
+    });
+    expect(plan.unmappedFieldIds).toHaveLength(0);
   });
 
   it("uses user override value type when present", () => {

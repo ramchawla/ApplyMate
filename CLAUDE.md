@@ -22,21 +22,21 @@ End-to-end AI job application automation across Chrome MV3 extension + Next.js d
 ### Installation
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Create local config
 cp .env.example .env.local
 # Edit .env.local with your paths
 
 # Build extension (Vite)
-npm run build:extension
+pnpm build:extension
 
 # Build dashboard (Next.js)
-npm run build:dashboard
+pnpm build:dashboard
 
 # Start dev servers
-npm run dev:extension    # Watch + rebuild on changes
-npm run dev:dashboard    # http://localhost:3000
+pnpm dev:extension    # Watch + rebuild on changes
+pnpm dev:dashboard    # http://localhost:3000
 ```
 
 ### Load Extension in Chrome
@@ -62,19 +62,23 @@ ApplyMate/
 │   │   │   │   ├── detectors/     # LinkedIn, Indeed, Greenhouse, Lever, Ashby
 │   │   │   │   └── extractors/    # DOM parsing for JD + form fields
 │   │   │   ├── ui/
-│   │   │   │   ├── side-panel.tsx # Main side panel (3-tab UI)
-│   │   │   │   ├── popup.tsx      # Quick action menu
-│   │   │   │   └── components/    # Input fields, form preview, etc.
+│   │   │   │   ├── side-panel.tsx # Main side panel UI
+│   │   │   │   ├── components/    # Form validation, autofill, manual entry, etc.
+│   │   │   │   └── styles/
+│   │   │   ├── lib/
+│   │   │   │   ├── field-mapping.ts # Field-type → profile value mapping
+│   │   │   │   ├── manual-prompt.ts # Self-contained prompt for manual LLM path
+│   │   │   │   ├── bridge.ts        # Bridge server client
+│   │   │   │   └── profile.ts       # Profile storage
 │   │   │   ├── background.ts      # Message routing + session storage
-│   │   │   ├── types.ts           # Shared types (ExtractedJobData, etc.)
+│   │   │   ├── types.ts           # Extension-local types
 │   │   │   └── utils/
 │   │   │       ├── storage.ts     # chrome.storage API wrappers
-│   │   │       ├── messaging.ts   # Content ↔ Background ↔ Panel messaging
-│   │   │       └── clipboard.ts   # Copy to clipboard helpers
+│   │   │       └── messaging.ts   # Content ↔ Background ↔ Panel messaging
 │   │   ├── manifest.json
 │   │   └── vite.config.ts
 │   │
-│   ├── dashboard/                 # Next.js + SQLite + Tectonic-WASM
+│   ├── dashboard/                 # Next.js + SQLite + local tectonic binary
 │   │   ├── app/
 │   │   │   ├── applications/      # "Applications" board (list, filter, archive)
 │   │   │   ├── resumes/           # "Resume Versions" (view, diff, download)
@@ -82,23 +86,33 @@ ApplyMate/
 │   │   │   └── analytics/         # Submit rate, interview rate, keyword analysis
 │   │   ├── lib/
 │   │   │   ├── db.ts              # SQLite connection + queries
-│   │   │   ├── tectonic.ts        # Tectonic-WASM wrapper (LaTeX → PDF)
+│   │   │   ├── tectonic.ts        # Local tectonic binary wrapper (LaTeX → PDF)
 │   │   │   └── diff.ts            # Resume version comparison
 │   │   └── package.json
 │   │
+│   ├── bridge/                    # Local bridge server (port 4179, bearer token)
+│   │
 │   └── skill/                     # Claude Code skill: /apply-to-job
-│       ├── apply-to-job.skill.ts  # Main skill handler
-│       ├── stages/
-│       │   ├── 1-parse-jd.ts      # Stage 1: extract keywords, seniority, tech stack
-│       │   ├── 2-retrieve.ts      # Stage 2: pgvector semantic search (corpus)
-│       │   ├── 3-rewrite.ts       # Stage 3: anchor-validated keyword injection
-│       │   ├── 4-latex.ts         # Stage 4: LaTeX assembly + Tectonic compilation
-│       │   └── 5-cover-letter.ts  # Stage 5: markdown generation
-│       ├── validators/
-│       │   ├── invariant-checks.ts # Verify no hallucinations (core logic)
-│       │   └── plausibility.ts    # Confidence scoring
-│       ├── types.ts               # ApplyJobInput/Output interfaces
-│       └── index.ts               # Export main handler
+│       ├── apply-to-job.md        # Skill definition
+│       ├── docker-compose.yml     # Optional local Postgres + pgvector
+│       ├── db/schema.sql
+│       └── src/
+│           ├── stages/
+│           │   ├── parse-jd.ts        # Stage 1: keywords, seniority, tech stack
+│           │   ├── retrieve.ts        # Stage 2: pgvector or in-memory KNN
+│           │   ├── rewrite.ts         # Stage 3: anchor-validated keyword injection
+│           │   ├── assemble-latex.ts  # Stage 4: LaTeX assembly
+│           │   └── cover-letter.ts    # Stage 5: markdown generation
+│           ├── validators/
+│           │   ├── invariant-checks.ts # Verify no hallucinations (core logic)
+│           │   └── plausibility.ts     # Confidence scoring
+│           ├── corpus/load.ts     # Load experience.yaml
+│           ├── embeddings/embedder.ts # Local MiniLM embeddings (@xenova/transformers)
+│           ├── db/pgvector.ts     # Optional Postgres KNN store
+│           ├── manual/process.ts  # Manual-LLM path: validate pasted response
+│           ├── cli/manual.ts      # pnpm skill:manual entrypoint
+│           ├── types.ts           # ApplyJobInput/Output interfaces
+│           └── index.ts           # Export main handler
 │
 ├── lib/
 │   ├── shared/
@@ -148,7 +162,7 @@ Claude Code (Pro, local)
     │   ├─ Stage 1: Parse JD → keywords
     │   ├─ Stage 2: Query pgvector corpus → top-K experiences
     │   ├─ Stage 3: Rewrite resume bullets (anchor-validated)
-    │   ├─ Stage 4: LaTeX assembly → compile to PDF (Tectonic-WASM)
+    │   ├─ Stage 4: LaTeX assembly → compile to PDF (local tectonic binary)
     │   └─ Stage 5: Generate cover letter (markdown)
     ├─ Return: ApplyJobOutput
     └─ User reviews plausibility report ✓
@@ -182,16 +196,16 @@ Next.js Dashboard (http://localhost:3000)
 ### Extension
 ```bash
 # Watch + rebuild on changes (Vite)
-npm run dev:extension
+pnpm dev:extension
 
-# Type check
-npm run type-check:extension
+# Type check (extension)
+pnpm type-check
 
 # Test extraction logic
-npm run test:extension
+pnpm test:extension
 
 # Build for production (creates dist/)
-npm run build:extension
+pnpm build:extension
 
 # Debug: Open extension service worker DevTools
 # chrome://extensions → Find ApplyMate → Details → Inspect views (service worker)
@@ -200,47 +214,40 @@ npm run build:extension
 ### Dashboard
 ```bash
 # Start dev server (http://localhost:3000)
-npm run dev:dashboard
-
-# Type check
-npm run type-check:dashboard
+pnpm dev:dashboard
 
 # Build for production
-npm run build:dashboard
+pnpm build:dashboard
 
-# Test (unit + integration)
-npm run test:dashboard
-
-# Migrate SQLite schema (if schema changes)
-npm run db:migrate
+# Bridge server (extension → SQLite persistence)
+pnpm bridge
+pnpm test:bridge
+pnpm type-check:bridge
 ```
 
 ### Skill
 ```bash
-# Register skill locally (so Claude Code recognizes /apply-to-job)
-npm run register:skill
+# Test skill (unit tests for each stage; DB tests skip without Postgres)
+pnpm test:skill
 
-# Test skill (unit tests for each stage)
-npm run test:skill
+# Type check
+pnpm type-check:skill
 
-# Full E2E test: extract → skill → form fill
-npm run test:e2e
+# Optional local Postgres + pgvector (in-memory KNN fallback works without it)
+pnpm skill:db:up
+pnpm skill:db:down
+
+# Manual LLM path: validate pasted claude.ai response, assemble, publish
+pnpm skill:manual
 ```
 
 ### All
 ```bash
 # Install all dependencies
-npm install
+pnpm install
 
-# Run all tests
-npm run test
-
-# Type check all packages
-npm run type-check
-
-# Lint + format
-npm run lint
-npm run format
+# Run extension tests (default)
+pnpm test
 ```
 
 ---
@@ -256,7 +263,7 @@ Extension (side panel) + Claude Code + Dashboard don't share direct memory. Data
 
 **Important**: No cloud sync by default. Versions stored in `~/.applymate/applications/`.
 
-### 2. The 5-Stage Pipeline (in `skill/stages/`)
+### 2. The 5-Stage Pipeline (in `packages/skill/src/stages/`)
 Each stage is a pure function that takes input, validates, returns output.
 
 ```typescript
@@ -274,7 +281,7 @@ revivals = rewriteBullets(masterResume, experiences, parsedJD)
 
 // Stage 4: LaTeX Assembly
 latex = assembleLatex(templateLatex, revisions)
-pdf = compileToPDF(latex)  // Tectonic-WASM
+pdf = compileToPDF(latex)  // local tectonic binary via dashboard /api/compile
 // → Both LaTeX string + PDF base64
 
 // Stage 5: Cover Letter
@@ -297,7 +304,7 @@ Keyword injection must validate against user's **experience corpus** (`~/.applym
 
 When rewriting a bullet, if JD says "Rust + async", we inject only if corpus has that anchor. If JD says "Rust + Go", we only inject "Rust" (Go not in corpus).
 
-**File**: `skill/validators/invariant-checks.ts`
+**File**: `packages/skill/src/validators/invariant-checks.ts`
 
 ### 4. Resume Versioning
 Each application saves a unique version:
@@ -342,8 +349,8 @@ Hard constraint. Extension stops at form preview step. User manually clicks subm
 | `packages/extension/src/content/content.ts` | Job board detection + extraction logic |
 | `packages/extension/src/ui/side-panel.tsx` | Main UI (3 tabs: data review, tailoring, form fill) |
 | `packages/extension/src/types.ts` | `ExtractedJobData`, `FormField`, etc. |
-| `packages/skill/stages/3-rewrite.ts` | Anchor-validated keyword injection (core) |
-| `packages/skill/validators/invariant-checks.ts` | Plausibility + hallucination checks |
+| `packages/skill/src/stages/rewrite.ts` | Anchor-validated keyword injection (core) |
+| `packages/packages/skill/src/validators/invariant-checks.ts` | Plausibility + hallucination checks |
 | `packages/dashboard/lib/db.ts` | SQLite queries (applications, versions) |
 | `lib/shared/types.ts` | Cross-package types |
 | `.env.example` | Config template (never commit .env.local) |
@@ -355,29 +362,27 @@ Hard constraint. Extension stops at form preview step. User manually clicks subm
 ### Unit Tests (per stage)
 ```bash
 # Test JD parsing
-npm run test:skill -- --testNamePattern="Stage 1"
+pnpm test:skill -- --testNamePattern="Stage 1"
 
 # Test vector retrieval
-npm run test:skill -- --testNamePattern="Stage 2"
+pnpm test:skill -- --testNamePattern="Stage 2"
 
 # Test anchor validation (critical)
-npm run test:skill -- --testNamePattern="invariant-checks"
+pnpm test:skill -- --testNamePattern="invariant-checks"
 ```
 
 ### Integration Tests
 ```bash
 # Test full 5-stage pipeline
-npm run test:skill -- --testNamePattern="pipeline"
+pnpm test:skill -- --testNamePattern="pipeline"
 
 # Test extension extraction on real HTML
-npm run test:extension -- --testNamePattern="LinkedIn"
+pnpm test:extension -- --testNamePattern="LinkedIn"
 ```
 
-### E2E Tests
-```bash
-# Full flow: extract → skill → form fill → dashboard
-npm run test:e2e
-```
+### E2E
+No automated E2E suite yet; verify manually: load extension → extract on a real
+posting → generate (skill or manual-LLM path) → autofill → check dashboard.
 
 Focus: **anchor validation tests** are critical. Every change to rewriting logic must pass these.
 
@@ -388,8 +393,8 @@ Focus: **anchor validation tests** are critical. Every change to rewriting logic
 ### Typical Session
 1. **Start dev servers**:
    ```bash
-   npm run dev:extension &
-   npm run dev:dashboard &
+   pnpm dev:extension &
+   pnpm dev:dashboard &
    ```
 
 2. **Load extension in Chrome** (if not already):
@@ -402,7 +407,7 @@ Focus: **anchor validation tests** are critical. Every change to rewriting logic
 
 4. **Run full test suite**:
    ```bash
-   npm run test
+   pnpm test
    ```
 
 5. **Debug extraction**:
@@ -421,12 +426,12 @@ Focus: **anchor validation tests** are critical. Every change to rewriting logic
 ## Deployment
 
 ### Chrome Extension
-1. Build: `npm run build:extension`
+1. Build: `pnpm build:extension`
 2. Test locally (load unpacked)
 3. Publish to Chrome Web Store (or share as `.crx` for sideloading)
 
 ### Next.js Dashboard
-- Run locally: `npm run dev:dashboard` (no deployment needed for MVP)
+- Run locally: `pnpm dev:dashboard` (no deployment needed for MVP)
 - Optional: Deploy to Vercel (`vercel deploy`)
 
 ### Skill
@@ -443,7 +448,7 @@ Focus: **anchor validation tests** are critical. Every change to rewriting logic
 | **Local resume storage** | Privacy; deterministic workflow; supports versioning |
 | **pgvector for retrieval** | Semantic search > keyword search for finding relevant experience |
 | **Anchor-validated rewriting** | Prevents hallucinated skills; all claims backed by corpus |
-| **Tectonic-WASM for PDF** | Zero server cost; instant client-side compilation |
+| **Local tectonic binary for PDF** | Zero server cost; instant client-side compilation |
 | **SQLite for dashboard** | Small data volume; no external DB; portable |
 | **Never auto-submit** | User always reviews; prevents accidents |
 | **5-stage pipeline** | Separation of concerns; each stage testable independently |
@@ -464,8 +469,8 @@ Focus: **anchor validation tests** are critical. Every change to rewriting logic
 1. Edit experience corpus (`~/.applymate/experience.yaml`)
    - Add new projects or skills
    - Refine `anchor` field (how to use this experience)
-2. Modify `packages/skill/stages/3-rewrite.ts` if needed
-3. Run tests: `npm run test:skill -- --testNamePattern="invariant"`
+2. Modify `packages/skill/src/stages/rewrite.ts` if needed
+3. Run tests: `pnpm test:skill -- --testNamePattern="invariant"`
 4. Test end-to-end with sample JD in Claude Code
 
 ### Add Dashboard Feature
@@ -500,8 +505,8 @@ Focus: **anchor validation tests** are critical. Every change to rewriting logic
 - **README.md** — Full spec, flows, success criteria
 - **Skill Input/Output** — `packages/skill/types.ts`
 - **Extension Types** — `packages/extension/src/types.ts`
-- **5-Stage Logic** — `packages/skill/stages/` (each stage ~100-200 LOC)
-- **Invariant Checks** — `packages/skill/validators/invariant-checks.ts` (core logic)
+- **5-Stage Logic** — `packages/skill/src/stages/` (each stage ~100-200 LOC)
+- **Invariant Checks** — `packages/packages/skill/src/validators/invariant-checks.ts` (core logic)
 
 ---
 

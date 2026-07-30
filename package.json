@@ -11,6 +11,7 @@
     "test": "pnpm --filter @applymate/extension test",
     "test:extension": "pnpm --filter @applymate/extension test",
     "test:skill": "pnpm --filter @applymate/skill test",
+    "skill:manual": "pnpm --filter @applymate/skill manual",
     "type-check": "pnpm --filter @applymate/extension type-check",
     "type-check:skill": "pnpm --filter @applymate/skill type-check",
     "skill:db:up": "pnpm --filter @applymate/skill db:up",
@@ -22,5 +23,6 @@
   "devDependencies": {
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0"
-  }
+  },
+  "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531"
 }

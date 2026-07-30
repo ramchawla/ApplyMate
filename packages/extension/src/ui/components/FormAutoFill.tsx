@@ -17,7 +17,11 @@ interface Props {
 export function FormAutoFill({ fields, output }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [instructions, setInstructions] = useState<FillInstruction[]>([]);
+  const [unmapped, setUnmapped] = useState<string[]>([]);
   const [status, setStatus] = useState<string>("");
+
+  const labelFor = (fieldId: string) =>
+    fields.find((f) => f.id === fieldId)?.label ?? fieldId;
 
   useEffect(() => {
     void getProfile().then(setProfile);
@@ -27,6 +31,7 @@ export function FormAutoFill({ fields, output }: Props) {
     if (profile) {
       const plan = buildFillPlan(fields, profile, output);
       setInstructions(plan.instructions);
+      setUnmapped(plan.unmappedFieldIds);
     }
   }, [profile, fields, output]);
 
@@ -42,7 +47,7 @@ export function FormAutoFill({ fields, output }: Props) {
       if (tabId === undefined) return;
       chrome.tabs.sendMessage(
         tabId,
-        { type: "APPLY_FILL_PLAN", instructions },
+        { type: "APPLY_FILL_PLAN", instructions, highlightFieldIds: unmapped },
         (res) => {
           if (res) {
             setStatus(
@@ -72,7 +77,8 @@ export function FormAutoFill({ fields, output }: Props) {
         {instructions.map((ins) => (
           <div key={ins.fieldId} className="text-xs space-y-1">
             <div className="text-gray-600">
-              {ins.valueType} {ins.isFile ? "(file — attach manually)" : ""}
+              <span className="font-medium">{labelFor(ins.fieldId)}</span>{" "}
+              ({ins.valueType}){ins.isFile ? " — file, attach manually" : ""}
             </div>
             {!ins.isFile && (
               <textarea
@@ -93,6 +99,18 @@ export function FormAutoFill({ fields, output }: Props) {
       </button>
 
       {status && <div className="text-xs text-green-700">{status}</div>}
+
+      {unmapped.length > 0 && (
+        <div className="text-xs text-yellow-700">
+          {unmapped.length} field(s) had no mapping and are highlighted yellow
+          on the page — fill them manually:
+          <ul className="list-disc ml-4">
+            {unmapped.map((id) => (
+              <li key={id}>{labelFor(id)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="border-t pt-3 text-xs text-red-700 font-medium">
         ⚠️ ApplyMate never submits. Review every field on the page, attach your

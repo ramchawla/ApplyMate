@@ -8,6 +8,7 @@ import { TailoringReview } from "./components/TailoringReview";
 import { FormAutoFill } from "./components/FormAutoFill";
 import { ExtractedJobData, SidePanelState } from "../types";
 import { getExtractedJobData, updateExtractedJobData } from "../utils/storage";
+import { sendToBackground } from "../utils/messaging";
 
 const LOW_CONFIDENCE_THRESHOLD = 0.7;
 
@@ -19,6 +20,10 @@ function App() {
   });
 
   useEffect(() => {
+    // Ask the content script to re-extract now that the side panel is open and
+    // the page DOM has settled (SPA forms rendered). Result lands in session
+    // storage and is picked up by the poll below.
+    void sendToBackground({ type: "REQUEST_REEXTRACT" });
     void loadExtractedData();
     const interval = setInterval(() => void loadExtractedData(), 1000);
     return () => clearInterval(interval);
@@ -77,13 +82,22 @@ function App() {
       {state.currentTab === "form-validation" && (
         <FormValidation
           fields={data.formFields}
-          onProceed={() =>
-            setState((prev) => ({ ...prev, currentTab: "tailoring-review" }))
-          }
+          onProceed={(validatedFields) => {
+            // Keep the user's per-field type corrections — the fill plan is
+            // built from these, so dropping them would undo the validation.
+            const updated = { ...data, formFields: validatedFields };
+            void updateExtractedJobData(updated);
+            setState((prev) => ({
+              ...prev,
+              extractedJobData: updated,
+              currentTab: "tailoring-review",
+            }));
+          }}
         />
       )}
       {state.currentTab === "tailoring-review" && (
         <TailoringReview
+          jobData={data}
           onProceed={(output) =>
             setState((prev) => ({
               ...prev,
