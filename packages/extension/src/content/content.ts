@@ -1,7 +1,7 @@
 import { detect } from "./detectors/index";
 import { extractJD } from "./extractors/index";
 import { extractLiveFields } from "./extractors/form";
-import { applyFill, attachFile, findField, highlightEmptyRequired } from "./fill";
+import { applyFill, attachFile, findField, highlightEmptyRequired, isFieldEmpty, readOptions } from "./fill";
 import { mountWidget, type WidgetState } from "./widget";
 import { FIELD_ATTR, press, sleep } from "./dom";
 import { fillWorkdayDates, fillWorkdaySections, isWorkday } from "./adapters/workday";
@@ -126,6 +126,16 @@ const toQuestion = (f: FormField) => ({
   required: f.required,
 });
 
+// What Claude may answer: never a lone checkbox (consent/terms/opt-ins are
+// the user's call unless a profile rule matched), never a field that already
+// holds a value (site prefill, adapter dates, an earlier run). react-select
+// inputs keep their value elsewhere, so they're always asked.
+function askable(doc: Document, f: FormField): boolean {
+  if (f.type === "checkbox" && (f.options?.length ?? 0) < 2) return false;
+  const el = findField(doc, f.id);
+  return !el || el.getAttribute("role") === "combobox" || isFieldEmpty(el);
+}
+
 // One press fills the page; on a wizard (Next/Continue on step 1) it fills
 // each step, presses Next, and stops at the page whose button is Submit —
 // never pressing it. Pauses on empty required fields or rejected steps.
@@ -211,7 +221,19 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
     report.filled += filledHere;
 
     const coverField = fields.find((f) => f.extractedValueType === "cover-letter");
-    const questions = plan.pending.filter((f) => f !== coverField);
+    // A profile value that fit no option ("Phone Device Type" got the phone
+    // number) is a question for Claude, not a pause.
+    const missed = new Set(first.missing);
+    const questions = [...plan.pending, ...fields.filter((f) => missed.has(f.id))].filter(
+      (f) => f !== coverField && askable(doc, f),
+    );
+    for (const [i, q] of questions.entries()) {
+      const el = q.options?.length ? null : findField(doc, q.id);
+      if (el) {
+        const options = await readOptions(el);
+        if (options.length) questions[i] = { ...q, options };
+      }
+    }
     if (step === 1) {
       wizard = findStepButton(doc)?.kind === "advance";
       status({ tone: "ok", text: `${wizard ? "Step 1 · " : ""}${filledHere} fields filled` });
@@ -277,7 +299,10 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
       const done = start?.jobId ? await poll("ANSWER_POLL", start.jobId, "Drafting answers") : null;
       if (Array.isArray(done?.answers)) answers.push(...done.answers);
     }
-    const second = await applyFill(answers.filter(untouched), doc);
+    // Only what was asked: a consent box or a field the user filled never
+    // takes an answer, whatever comes back.
+    const asked = new Set([...questions.map((q) => q.id), coverField?.id]);
+    const second = await applyFill(answers.filter((a) => asked.has(a.fieldId) && untouched(a)), doc);
     if (attachedNote || second.filled.length) {
       status({ tone: "ok", text: [attachedNote, `${second.filled.length} answers drafted`].filter(Boolean).join(" · ") }, "wait");
     }

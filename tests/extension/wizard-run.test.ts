@@ -12,7 +12,7 @@ function wizard(steps: string[]) {
   const render = () => {
     const main = d.getElementById("step")!;
     main.innerHTML = steps[log.at];
-    for (const b of Array.from(main.querySelectorAll("button"))) {
+    for (const b of Array.from(main.querySelectorAll("button:not([aria-haspopup])"))) {
       b.addEventListener("click", () => {
         const text = b.textContent!.trim();
         if (/submit/i.test(text)) return void log.submitPresses++;
@@ -169,5 +169,76 @@ describe("wizard engine", () => {
     await run(d, send);
     expect(log.snapshots[0].resume).toBe("");
     expect(sent.some((m) => m.type === "FETCH_PDF")).toBe(false);
+  });
+
+  it("sends a profile value that fits no option to Claude instead of pausing", async () => {
+    const { d, log } = wizard([
+      `<label for="pdt">Phone Device Type *</label>
+       <select id="pdt" required><option value="">Select One</option><option>Mobile</option><option>Home</option></select>
+       <button>Next</button>`,
+      STEP_REVIEW,
+    ]);
+    const { sent, send } = bridge([{ fieldId: "pdt", value: "Mobile" }]);
+    const withPhone = async (m: any) => (m.type === "GET_PROFILE" ? normalizeProfile({ phone: "416-555-0100" }) : send(m));
+    const report = await run(d, withPhone);
+    expect(sent.find((m) => m.type === "ANSWER_START").request.fields.map((f: any) => f.fieldId)).toEqual(["pdt"]);
+    expect(log.snapshots.length).toBe(1);
+    expect(report.stoppedAt).toBe("review");
+  });
+
+  it("opens a dropdown button to show Claude its options, then picks the answer", async () => {
+    const { d } = wizard([
+      `<label for="dev">Phone Device Type *</label>
+       <button id="dev" aria-haspopup="listbox" aria-controls="dev-lb" aria-required="true">Select One</button>
+       <button>Next</button>`,
+      STEP_REVIEW,
+    ]);
+    // Workday-style: the listbox exists only while open; Escape closes it.
+    d.addEventListener("click", (e) => {
+      const btn = (e.target as Element).closest("#dev");
+      const opt = (e.target as Element).closest("[role=option]");
+      if (opt) {
+        d.getElementById("dev")!.textContent = opt.textContent;
+        d.getElementById("dev-lb")?.remove();
+      } else if (btn && !d.getElementById("dev-lb")) {
+        d.body.insertAdjacentHTML("beforeend", `<ul role="listbox" id="dev-lb"><li role="option">Mobile</li><li role="option">Home</li></ul>`);
+      }
+    });
+    d.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Escape") d.getElementById("dev-lb")?.remove();
+    });
+    let picked = "";
+    const { sent, send } = bridge([]);
+    const answering = async (m: any) => {
+      if (m.type === "GET_PROFILE") return normalizeProfile({ phone: "416-555-0100" });
+      if (m.type === "ANSWER_POLL") {
+        const f = sent.find((x) => x.type === "ANSWER_START").request.fields[0];
+        picked = f.options?.[0] ?? "";
+        return { status: "done", answers: [{ fieldId: f.fieldId, value: picked }] };
+      }
+      return send(m);
+    };
+    const report = await run(d, answering);
+    expect(sent.find((m) => m.type === "ANSWER_START").request.fields[0].options).toEqual(["Mobile", "Home"]);
+    expect(picked).toBe("Mobile");
+    expect(report.stoppedAt).toBe("review");
+  });
+
+  it("never asks Claude about consent checkboxes or fields that already hold a value", async () => {
+    const { d, log } = wizard([
+      `<label for="note">Anything else?</label><textarea id="note">Prefilled by the site</textarea>
+       <label for="why">Why Acme?</label><textarea id="why"></textarea>
+       <input type="checkbox" id="agree" required><label for="agree">I consent to the terms and conditions *</label>
+       <button>Next</button>`,
+      STEP_REVIEW,
+    ]);
+    const { sent, send } = bridge([{ fieldId: "agree", value: "Yes" }, { fieldId: "why", value: "Platforms." }]);
+    const report = await run(d, send);
+    expect(sent.find((m) => m.type === "ANSWER_START").request.fields.map((f: any) => f.fieldId)).toEqual(["why"]);
+    expect((d.getElementById("agree") as HTMLInputElement).checked).toBe(false);
+    expect((d.getElementById("note") as HTMLTextAreaElement).value).toBe("Prefilled by the site");
+    expect(report.stoppedAt).toBe("needs-you");
+    expect(report.needsYou).toEqual(["agree"]);
+    expect(log.nextPresses).toBe(0);
   });
 });

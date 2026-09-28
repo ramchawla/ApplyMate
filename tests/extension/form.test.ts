@@ -228,3 +228,25 @@ describe("inferValueType", () => {
     expect(t("Email", "email")).toBe("email");
   });
 });
+
+describe("scrolled pages", () => {
+  it("keeps fields scrolled above the viewport but drops ones parked off the page", () => {
+    document.body.innerHTML = `<label for="a">City</label><input id="a"><label for="b">Website</label><input id="b">`;
+    const rects: Record<string, object> = {
+      a: { width: 300, left: 20, right: 320, top: -80, bottom: -50 }, // scrolled past
+      b: { width: 300, left: -9999, right: -9699, top: 400, bottom: 430 }, // honeypot
+    };
+    for (const id of ["a", "b"]) {
+      const el = document.getElementById(id) as any;
+      el.checkVisibility = () => true;
+      el.getBoundingClientRect = () => rects[id];
+    }
+    Object.defineProperty(window, "scrollY", { value: 600, configurable: true });
+    try {
+      expect(extractLiveFields(document, { stamp: false }).map((f) => f.label)).toEqual(["City"]);
+    } finally {
+      Object.defineProperty(window, "scrollY", { value: 0, configurable: true });
+      document.body.innerHTML = "";
+    }
+  });
+});

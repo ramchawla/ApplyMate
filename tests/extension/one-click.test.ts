@@ -18,6 +18,7 @@ const GREENHOUSE_LIKE = `
     <label for="q1">Why do you want to work at Acme? *</label><textarea id="q1" required aria-describedby="q1-d"></textarea><p id="q1-d">Tell us in 200-400 words.</p>
     <label for="q2">Are you legally authorized to work in Canada?</label>
     <select id="q2"><option value="">Select...</option><option>Yes</option><option>No</option></select>
+    <input type="checkbox" id="privacy"><label for="privacy">I agree to the privacy policy</label>
     <button type="submit">Submit application</button>
   </form>`;
 

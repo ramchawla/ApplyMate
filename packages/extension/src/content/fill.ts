@@ -13,6 +13,8 @@ import {
   isListboxButton,
   isPromptInput,
   PLACEHOLDER,
+  cleanText,
+  sleep,
 } from "./dom";
 
 export interface FillInstruction {
@@ -288,6 +290,21 @@ const keyTap = (el: HTMLElement, key: string) => {
 };
 
 // Workday dropdown: press the button, pick from the listbox it opens.
+// Dropdown buttons (Workday) render options only while open: open, read,
+// close — so Claude can answer with an exact option.
+export async function readOptions(btn: HTMLElement): Promise<string[]> {
+  if (!isListboxButton(btn)) return [];
+  press(btn);
+  let options: HTMLElement[] = [];
+  for (let t = 0; t < 30 && !options.length; t++) {
+    await sleep(50);
+    options = scopedOptions(btn);
+  }
+  const texts = options.map((o) => cleanText(o.textContent ?? "")).filter(Boolean);
+  keyTap(btn, "Escape");
+  return texts;
+}
+
 async function fillListboxButton(btn: HTMLElement, value: string): Promise<boolean> {
   press(btn);
   const pick = await waitForMatch(btn, value, 1500);

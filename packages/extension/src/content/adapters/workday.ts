@@ -157,8 +157,9 @@ export async function fillWorkdaySections(
       const entries = entriesOf(section, spec.entry);
       for (const [i, entry] of entries.entries()) {
         const item = items[i];
-        const fields = extractLiveFields(entry).filter((f) => !findField(doc, f.id)?.matches(DATE_INPUT));
-        owned.push(...fields.map((f) => f.id));
+        const all = extractLiveFields(entry);
+        owned.push(...all.map((f) => f.id));
+        const fields = all.filter((f) => !findField(doc, f.id)?.matches(DATE_INPUT));
         if (!item) continue;
         const instructions = fields.flatMap((f) => {
           const key = spec.labels.find(([re]) => re.test(f.label))?.[1];

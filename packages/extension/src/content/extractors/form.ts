@@ -157,8 +157,11 @@ function isTrapOrPlumbing(el: HTMLElement, htmlType: string): boolean {
   const check = (el as HTMLElement & { checkVisibility?: (o: object) => boolean }).checkVisibility;
   if (typeof check === "function" && el.ownerDocument.defaultView) {
     if (!check.call(el, { checkVisibilityCSS: true, checkOpacity: true })) return true;
+    // Parked off the page (left:-9999px). The rect is viewport-relative, so
+    // add the scroll offset: fields merely scrolled past are real.
     const r = el.getBoundingClientRect();
-    return r.width > 0 && (r.right < 0 || r.bottom < 0); // parked off-screen
+    const win = el.ownerDocument.defaultView!;
+    return r.width > 0 && (r.right + win.scrollX < 0 || r.bottom + win.scrollY < 0);
   }
   // jsdom / detached documents: inline styles on the element and ancestors.
   for (let n: HTMLElement | null = el; n; n = n.parentElement) {
