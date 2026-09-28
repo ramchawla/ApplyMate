@@ -2,59 +2,39 @@ export type {
   ExtractedJobData,
   FormField,
   DetectionResult,
+  TailorRequest,
+  TailorResult,
+  TailorQuestion,
+  RunReport,
 } from "../../../lib/shared/types";
 
-export interface MessageFromContent {
-  type: "JOB_EXTRACTED" | "ERROR" | "OPEN_SIDE_PANEL";
-  data?: unknown;
-  error?: string;
-}
-
-export interface MessageFromBackground {
-  type: "OPEN_CLAUDE_CODE" | "APPLY_JOB_OUTPUT_RECEIVED";
-  data?: unknown;
-}
-
-export interface SidePanelState {
-  extractedJobData?: import("../../../lib/shared/types").ExtractedJobData;
-  currentTab:
-    | "data-review"
-    | "form-validation"
-    | "tailoring-review"
-    | "form-auto-fill";
-  isLoading: boolean;
-  approvedOutput?: {
-    coverLetter: string;
-    formFieldGuidance: { fieldId: string; suggestedAnswer: string }[];
-  };
-}
-
 export interface Profile {
-  fullName: string;
+  name: { first: string; last: string; preferred: string };
   email: string;
   phone: string;
-  linkedin: string;
-  github: string;
-  website: string;
+  address: { street: string; city: string; state: string; zip: string; country: string };
   location: string;
-  workAuthorization: string;
-  salaryExpectation: string;
-}
-
-export interface FillInstruction {
-  fieldId: string;
-  valueType: string;
-  value: string;
-  isFile: boolean;
-}
-
-export interface FillPlan {
-  instructions: FillInstruction[];
-  unmappedFieldIds: string[];
-}
-
-export interface ApplyFillPlanMessage {
-  type: "APPLY_FILL_PLAN";
-  instructions: FillInstruction[];
-  highlightFieldIds?: string[];
+  links: { linkedin: string; github: string; portfolio: string };
+  current: { company: string; title: string };
+  education: {
+    school: string;
+    degree: string;
+    major: string;
+    gpa: string;
+    start: string;
+    end: string;
+  };
+  work_auth: { authorized: string; sponsorship: string };
+  start_date: string;
+  salary: string;
+  relocate: string;
+  eeo: {
+    pronouns: string;
+    gender: string;
+    race: string;
+    hispanic: string;
+    veteran: string;
+    disability: string;
+  };
+  answers: { match: string; answer: string }[];
 }

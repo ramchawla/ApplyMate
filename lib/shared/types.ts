@@ -10,25 +10,14 @@ export interface FormField {
     | "file"
     | "checkbox"
     | "radio"
+    | "combobox"
+    | "date"
+    | "number"
+    | "url"
     | "unknown";
   placeholder?: string;
   required: boolean;
-  extractedValueType?:
-    | "name"
-    | "first-name"
-    | "last-name"
-    | "email"
-    | "phone"
-    | "linkedin"
-    | "github"
-    | "website"
-    | "location"
-    | "work-auth"
-    | "salary"
-    | "resume"
-    | "cover-letter"
-    | "custom-q"
-    | null;
+  extractedValueType?: string | null;
   options?: string[];
   matchConfidence: number;
   userSelectedValueType?: string;

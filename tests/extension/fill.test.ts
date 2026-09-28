@@ -1,170 +1,169 @@
-import { describe, it, expect } from "vitest";
-import { applyFillPlan } from "../../packages/extension/src/content/fill";
-import type { FillInstruction } from "../../packages/extension/src/types";
+import { describe, it, expect, vi } from "vitest";
+import {
+  applyFill,
+  attachFile,
+  matchOption,
+  highlightEmptyRequired,
+} from "../../packages/extension/src/content/fill";
+import { extractLiveFields } from "../../packages/extension/src/content/extractors/form";
 
-function setupDom(html: string): Document {
-  return new DOMParser().parseFromString(html, "text/html");
+function doc(html: string): Document {
+  const d = document.implementation.createHTMLDocument("t");
+  d.body.innerHTML = html;
+  return d;
 }
 
-describe("applyFillPlan", () => {
-  it("sets text input values by id", () => {
-    const doc = setupDom(`<input id="n" type="text" />`);
-    const ins: FillInstruction[] = [
-      { fieldId: "n", valueType: "name", value: "Jane Dev", isFile: false },
-    ];
-    const result = applyFillPlan(ins, doc);
-    expect((doc.getElementById("n") as HTMLInputElement).value).toBe("Jane Dev");
-    expect(result.filled).toContain("n");
+describe("matchOption", () => {
+  const opts = [
+    "Yes, I am authorized",
+    "No",
+    "Not a protected veteran",
+    "I don't wish to answer",
+    "Canada",
+  ];
+  it.each([
+    ["yes", 0],
+    ["No", 1],
+    ["Decline to self-identify", 3],
+    ["Toronto, Ontario, Canada", 4],
+    ["", -1],
+    ["Purple", -1],
+  ])("%s → %i", (wanted, idx) => {
+    expect(matchOption(opts, wanted as string)).toBe(idx);
   });
-
-  it("sets textarea values", () => {
-    const doc = setupDom(`<textarea id="cl"></textarea>`);
-    const ins: FillInstruction[] = [
-      {
-        fieldId: "cl",
-        valueType: "cover-letter",
-        value: "Dear Acme",
-        isFile: false,
-      },
-    ];
-    applyFillPlan(ins, doc);
-    expect((doc.getElementById("cl") as HTMLTextAreaElement).value).toBe(
-      "Dear Acme",
-    );
+  it("prefers exact over prefix", () => {
+    expect(matchOption(["Not applicable", "No"], "no")).toBe(1);
   });
-
-  it("dispatches input and change events", () => {
-    const doc = setupDom(`<input id="n" type="text" />`);
-    const el = doc.getElementById("n") as HTMLInputElement;
-    const seen: string[] = [];
-    el.addEventListener("input", () => seen.push("input"));
-    el.addEventListener("change", () => seen.push("change"));
-    applyFillPlan(
-      [{ fieldId: "n", valueType: "name", value: "x", isFile: false }],
-      doc,
-    );
-    expect(seen).toEqual(["input", "change"]);
+  it("matches the city head of a location against suggestions", () => {
+    expect(matchOption(["Toronto, ON, Canada", "Torino, Italy"], "Toronto, Ontario")).toBe(0);
   });
+});
 
-  it("finds fields by name when id is absent", () => {
-    const doc = setupDom(`<input name="email" type="email" />`);
-    applyFillPlan(
-      [{ fieldId: "email", valueType: "email", value: "a@b.c", isFile: false }],
-      doc,
-    );
-    expect(
-      (doc.querySelector('[name="email"]') as HTMLInputElement).value,
-    ).toBe("a@b.c");
-  });
-
-  it("selects a matching option by visible text", () => {
-    const doc = setupDom(
-      `<select id="auth">
-         <option value="">Select...</option>
-         <option value="yes_citizen">Yes, I am a US Citizen</option>
-         <option value="no">No</option>
-       </select>`,
-    );
-    const result = applyFillPlan(
+describe("applyFill", () => {
+  it("fills text, textarea, select, radio group, checkbox by applymate id", async () => {
+    const d = doc(`
+      <input id="n"><textarea id="t"></textarea>
+      <select id="s"><option value="">Select</option><option value="y">Yes, I am</option><option value="n">No</option></select>
+      <label><input type="radio" name="r" value="a">Yes</label><label><input type="radio" name="r" value="b">No</label>
+      <input type="checkbox" id="c">`);
+    extractLiveFields(d);
+    const res = await applyFill(
       [
-        {
-          fieldId: "auth",
-          valueType: "work-auth",
-          value: "US Citizen",
-          isFile: false,
-        },
+        { fieldId: "n", value: "Jane" },
+        { fieldId: "t", value: "Long answer" },
+        { fieldId: "s", value: "Yes" },
+        { fieldId: "r", value: "No" },
+        { fieldId: "c", value: "yes" },
       ],
-      doc,
+      d,
     );
-    expect((doc.getElementById("auth") as HTMLSelectElement).value).toBe(
-      "yes_citizen",
-    );
-    expect(result.filled).toContain("auth");
+    expect(res.missing).toEqual([]);
+    expect((d.getElementById("n") as HTMLInputElement).value).toBe("Jane");
+    expect((d.getElementById("t") as HTMLTextAreaElement).value).toBe("Long answer");
+    expect((d.getElementById("s") as HTMLSelectElement).value).toBe("y");
+    expect((d.querySelector("input[value=b]") as HTMLInputElement).checked).toBe(true);
+    expect((d.getElementById("c") as HTMLInputElement).checked).toBe(true);
   });
 
-  it("reports a select with no matching option as missing", () => {
-    const doc = setupDom(
-      `<select id="s"><option value="a">Alpha</option></select>`,
-    );
-    const result = applyFillPlan(
-      [{ fieldId: "s", valueType: "custom-q", value: "zzz", isFile: false }],
-      doc,
-    );
-    expect(result.missing).toContain("s");
-  });
-
-  it("checks a checkbox for affirmative values", () => {
-    const doc = setupDom(`<input id="cb" type="checkbox" />`);
-    applyFillPlan(
-      [{ fieldId: "cb", valueType: "work-auth", value: "Yes", isFile: false }],
-      doc,
-    );
-    expect((doc.getElementById("cb") as HTMLInputElement).checked).toBe(true);
-  });
-
-  it("picks the right radio in a group by label text", () => {
-    const doc = setupDom(
-      `<label><input type="radio" name="visa" value="1" id="r1" />Yes, I need sponsorship</label>
-       <label><input type="radio" name="visa" value="2" id="r2" />No sponsorship required</label>`,
-    );
-    applyFillPlan(
+  it("reports missing fields and unmatched options", async () => {
+    const d = doc(`<select id="s"><option>A</option></select>`);
+    extractLiveFields(d);
+    const res = await applyFill(
       [
-        {
-          fieldId: "visa",
-          valueType: "work-auth",
-          value: "No sponsorship",
-          isFile: false,
-        },
+        { fieldId: "s", value: "Z" },
+        { fieldId: "ghost", value: "x" },
       ],
-      doc,
+      d,
     );
-    expect((doc.getElementById("r2") as HTMLInputElement).checked).toBe(true);
-    expect((doc.getElementById("r1") as HTMLInputElement).checked).toBe(false);
+    expect(res.missing).toEqual(["s", "ghost"]);
   });
 
-  it("writes through an instance value property that shadows the native setter (controlled inputs)", () => {
-    const doc = setupDom(`<input id="n" type="text" />`);
-    const el = doc.getElementById("n") as HTMLInputElement;
-    // Simulate a React-style value tracker: an instance property intercepting
-    // plain `.value =` writes.
-    let trackerSaw = "";
-    const native = Object.getOwnPropertyDescriptor(
-      Object.getPrototypeOf(el),
-      "value",
-    )!;
-    Object.defineProperty(el, "value", {
+  it("clicks the matching option in an ARIA radiogroup", async () => {
+    const d = doc(
+      `<div role="radiogroup" aria-label="Sponsor?"><div role="radio">Yes</div><div role="radio">No</div></div>`,
+    );
+    extractLiveFields(d);
+    const clicked: string[] = [];
+    d.querySelectorAll("[role=radio]").forEach((r) =>
+      r.addEventListener("click", () => clicked.push(r.textContent!)),
+    );
+    await applyFill([{ fieldId: "am-0", value: "No" }], d);
+    expect(clicked).toEqual(["No"]);
+  });
+
+  it("drives a react-select style combobox", async () => {
+    const d = doc(
+      `<label for="cb">Gender</label><div class="ctl"><input id="cb" role="combobox"></div><div id="menu"></div><input type="hidden" id="val">`,
+    );
+    const input = d.getElementById("cb") as HTMLInputElement;
+    const menu = d.getElementById("menu")!;
+    const render = (filter: string) => {
+      menu.innerHTML = "";
+      for (const o of ["Male", "Female", "I don't wish to answer"]) {
+        if (filter && !o.toLowerCase().includes(filter.toLowerCase())) continue;
+        const el = d.createElement("div");
+        el.setAttribute("role", "option");
+        el.textContent = o;
+        el.addEventListener(
+          "click",
+          () => ((d.getElementById("val") as HTMLInputElement).value = o),
+        );
+        menu.appendChild(el);
+      }
+    };
+    input.addEventListener(
+      "keydown",
+      (e) => (e as KeyboardEvent).key === "ArrowDown" && setTimeout(() => render(""), 20),
+    );
+    input.addEventListener("input", () => setTimeout(() => render(input.value), 20));
+    extractLiveFields(d);
+    const res = await applyFill([{ fieldId: "cb", value: "Decline to self-identify" }], d);
+    expect(res.filled).toEqual(["cb"]);
+    expect((d.getElementById("val") as HTMLInputElement).value).toBe("I don't wish to answer");
+  });
+});
+
+describe("attachFile", () => {
+  it("sets files through DataTransfer and fires change", () => {
+    const d = doc(`<input type="file" id="f">`);
+    const input = d.getElementById("f") as HTMLInputElement;
+    let assigned: unknown = null;
+    Object.defineProperty(input, "files", {
+      set: (v) => (assigned = v),
+      get: () => assigned,
       configurable: true,
-      get: () => native.get!.call(el),
-      set: (v: string) => {
-        trackerSaw = v;
-      },
     });
-    applyFillPlan(
-      [{ fieldId: "n", valueType: "name", value: "Jane", isFile: false }],
-      doc,
-    );
-    // The native setter was used, so the DOM value updated even though the
-    // instance property would have swallowed a plain assignment.
-    expect(native.get!.call(el)).toBe("Jane");
-    expect(trackerSaw).toBe("");
+    class FakeDT {
+      private list: File[] = [];
+      items = { add: (f: File) => this.list.push(f) };
+      get files() {
+        return this.list;
+      }
+    }
+    vi.stubGlobal("DataTransfer", FakeDT);
+    const onChange = vi.fn();
+    input.addEventListener("change", onChange);
+    expect(attachFile(input, new File(["%PDF"], "r.pdf", { type: "application/pdf" }))).toBe(true);
+    expect((assigned as File[])[0].name).toBe("r.pdf");
+    expect(onChange).toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
-  it("outlines highlight fields in yellow", () => {
-    const doc = setupDom(`<input id="mystery" type="text" />`);
-    applyFillPlan([], doc, ["mystery"]);
+  it("returns false when DataTransfer is unavailable", () => {
+    const d = doc(`<input type="file" id="f">`);
+    vi.stubGlobal("DataTransfer", undefined);
     expect(
-      (doc.getElementById("mystery") as HTMLInputElement).style.outline,
-    ).toContain("#facc15");
+      attachFile(d.getElementById("f") as HTMLInputElement, new File(["x"], "x.pdf")),
+    ).toBe(false);
+    vi.unstubAllGlobals();
   });
+});
 
-  it("reports missing fields and skips file instructions", () => {
-    const doc = setupDom(`<input id="n" type="text" />`);
-    const ins: FillInstruction[] = [
-      { fieldId: "absent", valueType: "email", value: "x", isFile: false },
-      { fieldId: "r", valueType: "resume", value: "", isFile: true },
-    ];
-    const result = applyFillPlan(ins, doc);
-    expect(result.missing).toContain("absent");
-    expect(result.filled).not.toContain("r");
+describe("highlightEmptyRequired", () => {
+  it("outlines required fields still empty", () => {
+    const d = doc(`<input id="a" required><input id="b" required value="x"><input id="c">`);
+    const fields = extractLiveFields(d);
+    expect(highlightEmptyRequired(d, fields)).toEqual(["a"]);
+    expect((d.getElementById("a") as HTMLElement).style.outline).toContain("solid");
   });
 });
