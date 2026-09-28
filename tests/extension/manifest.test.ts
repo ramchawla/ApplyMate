@@ -22,21 +22,9 @@ describe("extension manifest", () => {
     expect(allJs).toContain("content.js");
   });
 
-  it("matches every supported job board", () => {
-    const matches: string[] = manifest.content_scripts.flatMap(
-      (cs: { matches?: string[] }) => cs.matches ?? [],
-    );
-    const joined = matches.join(" ");
-
-    for (const host of [
-      "linkedin.com",
-      "indeed.com",
-      "greenhouse.io",
-      "lever.co",
-      "ashbyhq.com",
-      "myworkdayjobs.com",
-    ]) {
-      expect(joined).toContain(host);
-    }
+  it("injects on every site and frame (widget gating happens in the script)", () => {
+    const cs = manifest.content_scripts[0];
+    expect(cs.matches).toEqual(["<all_urls>"]);
+    expect(cs.all_frames).toBe(true);
   });
 });

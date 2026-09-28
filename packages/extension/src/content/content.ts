@@ -1,86 +1,195 @@
 import { detect } from "./detectors/index";
-import { extractJD, extractFormFields } from "./extractors/index";
-import { applyFillPlan } from "./fill";
-import { ExtractedJobData } from "../types";
-import { v4 as uuidv4 } from "uuid";
+import { extractJD } from "./extractors/index";
+import { extractLiveFields } from "./extractors/form";
+import { applyFill, attachFile, findField, highlightEmptyRequired } from "./fill";
+import { mountWidget, type WidgetState } from "./widget";
+import { sleep } from "./dom";
+import { buildInstantPlan } from "../lib/field-mapping";
+import { pickJD, rememberJD, type CachedJD, type PageJD } from "../lib/jd-cache";
+import type { FormField, Profile, RunReport, TailorResult } from "../types";
 
-export async function extractAndSend(html: string): Promise<void> {
-  try {
-    const detection = detect({ url: getUrl(), html });
-
-    const { jobDescription, jobTitle, company } = extractJD(
-      html,
-      detection.board,
-    );
-    const formFields = extractFormFields(html);
-
-    const extractedJobData: ExtractedJobData = {
-      id: uuidv4(),
-      url: getUrl(),
-      timestamp: new Date().toISOString(),
-      board: detection.board,
-      boardConfidence: detection.confidence,
-      jobTitle,
-      company,
-      jobDescription,
-      formFields,
-      userValidated: false,
-    };
-
-    chrome.runtime.sendMessage({
-      type: "JOB_EXTRACTED",
-      data: extractedJobData,
-    });
-
-    injectExtensionButton();
-  } catch (error) {
-    chrome.runtime.sendMessage({ type: "ERROR", error: String(error) });
-  }
+export function isApplicationForm(fields: FormField[]): boolean {
+  const hasResume = fields.some((f) => f.type === "file" && f.extractedValueType === "resume");
+  const hasEmail = fields.some((f) => f.extractedValueType === "email");
+  return hasResume || (hasEmail && fields.length >= 4);
 }
 
-function getUrl(): string {
-  return typeof window !== "undefined" && window.location
-    ? window.location.href
-    : "";
+const SUBMIT_TEXT = /^(submit( my)?( application)?|send application|apply|apply now|finish)$/i;
+
+export function isSubmitControl(el: Element): boolean {
+  const btn = el.closest("button, input[type=submit], [role=button]") as HTMLElement | null;
+  if (!btn) return false;
+  const text = (btn.textContent || (btn as HTMLInputElement).value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return SUBMIT_TEXT.test(text);
 }
 
-function injectExtensionButton(): void {
-  if (typeof document === "undefined") return;
-  if (document.getElementById("applymate-button")) return;
+export function isPostingPage(board: string, confidence: number): boolean {
+  if (board === "unknown") return false;
+  return board !== "generic" || confidence >= 0.75;
+}
 
-  const button = document.createElement("button");
-  button.id = "applymate-button";
-  button.innerText = "ApplyMate";
-  button.style.cssText = [
-    "position: fixed",
-    "top: 10px",
-    "right: 10px",
-    "z-index: 10000",
-    "padding: 8px 16px",
-    "background: #4F46E5",
-    "color: white",
-    "border: none",
-    "border-radius: 6px",
-    "cursor: pointer",
-    "font-weight: bold",
-  ].join(";");
+type Line = WidgetState["lines"][number];
+// Messages to the background worker; responses are loosely typed JSON.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Send = (msg: unknown) => Promise<any>;
 
-  button.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "OPEN_SIDE_PANEL" });
+export interface OneClickContext {
+  doc: Document;
+  fields: FormField[];
+  jd: PageJD;
+  jdSource: string;
+  keywords: string[];
+  send: Send;
+  onStatus: (lines: Line[]) => void;
+  pollMs?: number;
+  settleMs?: number;
+}
+
+const POLL_LIMIT_MS = 240_000;
+
+function base64ToFile(b64: string, name: string): File {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new File([bytes], name, { type: "application/pdf" });
+}
+
+export async function runOneClick(ctx: OneClickContext): Promise<RunReport> {
+  const { doc, fields, send } = ctx;
+  const lines: Line[] = [];
+  const status = (line: Line, replaceTone?: Line["tone"]) => {
+    if (replaceTone) {
+      const i = lines.findIndex((l) => l.tone === replaceTone);
+      if (i !== -1) lines.splice(i, 1);
+    }
+    lines.push(line);
+    ctx.onStatus([...lines]);
+  };
+
+  // Phase 1 — instant fill from the profile.
+  const profile = (await send({ type: "GET_PROFILE" })) as Profile;
+  const plan = buildInstantPlan(fields, profile);
+  const first = await applyFill(plan.instructions, doc);
+  status({ tone: "ok", text: `${first.filled.length} fields filled` });
+
+  const report: RunReport = {
+    url: ctx.jd.url,
+    title: ctx.jd.title,
+    company: ctx.jd.company,
+    jdSource: ctx.jdSource,
+    filled: first.filled.length,
+    needsYou: [],
+    at: Date.now(),
+  };
+
+  // Phase 2 — tailor in the background.
+  const coverField = fields.find((f) => f.extractedValueType === "cover-letter");
+  const start = await send({
+    type: "TAILOR_START",
+    request: {
+      job: {
+        title: ctx.jd.title,
+        company: ctx.jd.company,
+        url: ctx.jd.url,
+        description: ctx.jd.description,
+      },
+      keywords: ctx.keywords,
+      fields: plan.pending
+        .filter((f) => f.extractedValueType !== "cover-letter")
+        .map((f) => ({
+          fieldId: f.id,
+          label: f.label,
+          type: f.type,
+          options: f.options,
+          required: f.required,
+        })),
+      wantCoverLetterPdf: coverField?.type === "file",
+    },
   });
 
-  document.body.appendChild(button);
+  let result: TailorResult | undefined;
+  if (!start?.jobId) {
+    report.error = `Bridge offline or failed (${start?.error ?? "no response"}) — start it with \`pnpm bridge\``;
+    status({ tone: "err", text: report.error });
+  } else {
+    const began = Date.now();
+    for (;;) {
+      await sleep(ctx.pollMs ?? 2000);
+      const s = await send({ type: "TAILOR_POLL", jobId: start.jobId });
+      if (s?.status === "done") {
+        result = s.result as TailorResult;
+        break;
+      }
+      if (s?.status === "error" || s?.error || Date.now() - began > POLL_LIMIT_MS) {
+        report.error = `Tailoring failed: ${s?.error ?? "timed out"}`;
+        status({ tone: "err", text: report.error }, "wait");
+        break;
+      }
+      status(
+        { tone: "wait", text: `Tailoring resume… ${Math.round((Date.now() - began) / 1000)}s` },
+        "wait",
+      );
+    }
+  }
+
+  if (result) {
+    report.result = result;
+    const resumeField = fields.find(
+      (f) => f.type === "file" && f.extractedValueType === "resume",
+    );
+    const resumeInput = resumeField
+      ? (findField(doc, resumeField.id) as HTMLInputElement | null)
+      : null;
+    let attached = false;
+    if (resumeInput) {
+      const pdf = await send({ type: "FETCH_PDF", jobId: start.jobId, kind: "resume" });
+      if (pdf?.base64) attached = attachFile(resumeInput, base64ToFile(pdf.base64, result.fileName));
+    }
+    if (coverField?.type === "file" && result.hasCoverLetterPdf) {
+      const input = findField(doc, coverField.id) as HTMLInputElement | null;
+      const pdf = await send({ type: "FETCH_PDF", jobId: start.jobId, kind: "cover-letter" });
+      if (input && pdf?.base64) {
+        attachFile(
+          input,
+          base64ToFile(pdf.base64, result.fileName.replace(/\.pdf$/, "_Cover_Letter.pdf")),
+        );
+      }
+    }
+
+    // Resume parsers (Lever, Ashby) overwrite fields on upload — let them
+    // finish, then re-apply the profile values and Claude's answers.
+    await sleep(ctx.settleMs ?? 1500);
+    await applyFill(plan.instructions, doc);
+    const answers = [...result.answers];
+    if (coverField && coverField.type !== "file" && result.coverLetter) {
+      answers.push({ fieldId: coverField.id, value: result.coverLetter });
+    }
+    const second = await applyFill(answers, doc);
+
+    status(
+      {
+        tone: "ok",
+        text: `${attached ? `PDF attached (${result.pages} page)` : "PDF ready (attach manually)"} · ${second.filled.length} answers drafted`,
+      },
+      "wait",
+    );
+    if (result.warnings.length) {
+      status({ tone: "warn", text: `${result.warnings.length} things to double-check (Details)` });
+    }
+  }
+
+  report.needsYou = highlightEmptyRequired(doc, fields);
+  if (report.needsYou.length) {
+    status({ tone: "warn", text: `${report.needsYou.length} required fields need you` });
+  }
+  await send({ type: "RUN_REPORT", report });
+  return report;
 }
 
-// Live side effects only run inside a real extension context (onMessage present).
-// In unit tests the chrome mock omits onMessage, so this block is skipped.
-const inExtension =
-  typeof chrome !== "undefined" &&
-  !!chrome.runtime &&
-  !!(chrome.runtime as { onMessage?: unknown }).onMessage;
-
-// Multi-step ATS wizards (LinkedIn Easy Apply, Workday) inject new fields
-// after the initial snapshot; re-extract when form controls appear.
+// Re-scan only when form controls appear — cheap on pages that churn DOM
+// constantly (LinkedIn feed) but never add inputs.
 const REEXTRACT_DEBOUNCE_MS = 400;
 
 export function watchForInjectedFields(
@@ -88,56 +197,205 @@ export function watchForInjectedFields(
   onFieldsChanged: () => void,
 ): MutationObserver {
   let timer: ReturnType<typeof setTimeout> | undefined;
-
   const observer = new MutationObserver((mutations) => {
     const addedFormControls = mutations.some((m) =>
       Array.from(m.addedNodes).some(
         (node) =>
           node instanceof Element &&
-          (node.matches("input, textarea, select, form") ||
+          !node.hasAttribute("data-applymate-widget") &&
+          (node.matches("input, textarea, select, form, [role=combobox], [role=radiogroup]") ||
             node.querySelector?.("input, textarea, select") !== null),
       ),
     );
     if (!addedFormControls) return;
-
     if (timer !== undefined) clearTimeout(timer);
     timer = setTimeout(onFieldsChanged, REEXTRACT_DEBOUNCE_MS);
   });
-
   observer.observe(doc.body, { childList: true, subtree: true });
-
   doc.defaultView?.addEventListener("pagehide", () => {
     if (timer !== undefined) clearTimeout(timer);
     observer.disconnect();
   });
-
   return observer;
 }
 
-if (inExtension) {
-  console.log("[ApplyMate] Content script loaded on:", getUrl());
+// ---------------------------------------------------------------------------
+// Live wiring — only inside a real extension context.
 
-  void extractAndSend(document.documentElement.outerHTML);
+const inExtension =
+  typeof chrome !== "undefined" &&
+  !!chrome.runtime &&
+  !!(chrome.runtime as { onMessage?: unknown }).onMessage;
 
-  watchForInjectedFields(document, () => {
-    void extractAndSend(document.documentElement.outerHTML);
-  });
-
-  chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
-    if (request?.type === "EXTRACT_JOB_DATA") {
-      void extractAndSend(document.documentElement.outerHTML);
-      sendResponse({ status: "extraction_started" });
-      return false;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function send(msg: unknown): Promise<any> {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage(msg, (res) => {
+        void chrome.runtime.lastError;
+        resolve(res ?? { error: "no response" });
+      });
+    } catch (err) {
+      resolve({ error: String(err) });
     }
-    if (request?.type === "APPLY_FILL_PLAN") {
-      const result = applyFillPlan(
-        request.instructions,
-        document,
-        request.highlightFieldIds ?? [],
-      );
-      sendResponse(result);
-      return false;
-    }
-    return false;
   });
+}
+
+function storageGet<T>(key: string, fallback: T): Promise<T> {
+  return new Promise((resolve) =>
+    chrome.storage.local.get(key, (r) => resolve((r[key] as T) ?? fallback)),
+  );
+}
+function storageSet(items: Record<string, unknown>): Promise<void> {
+  return new Promise((resolve) => chrome.storage.local.set(items, () => resolve()));
+}
+
+async function main(): Promise<void> {
+  const isTop = window.top === window;
+  let widget: ReturnType<typeof mountWidget> | null = null;
+  let fields: FormField[] = [];
+  let page: PageJD = { url: location.href, title: "", company: "", description: "" };
+  let posting = false;
+  let ignoreRecent = false;
+  let ranFill = false;
+  const last: { jobId?: string; result?: TailorResult } = {};
+  const ui: WidgetState = {
+    mode: "form",
+    title: "",
+    company: "",
+    jdSource: "none",
+    keywords: await storageGet<string[]>("keywords", []),
+    busy: false,
+    lines: [],
+    injected: [],
+    skipped: [],
+    collapsed: false,
+    canOpenPdf: false,
+  };
+
+  async function currentJD() {
+    const cache = await storageGet<Record<string, CachedJD>>("jdCache", {});
+    const overrides = await storageGet<Record<string, string>>("jdOverrides", {});
+    return pickJD(page, { cache, overrides }, Date.now(), ignoreRecent);
+  }
+
+  async function refresh(readJD: boolean): Promise<void> {
+    if (readJD) {
+      const html = document.documentElement.outerHTML;
+      const detection = detect({ url: location.href, html });
+      posting = isTop && isPostingPage(detection.board, detection.confidence);
+      const extracted = posting
+        ? extractJD(html, detection.board)
+        : { jobTitle: "", company: "", jobDescription: "" };
+      page = {
+        url: location.href,
+        title: extracted.jobTitle,
+        company: extracted.company,
+        description: extracted.jobDescription,
+      };
+      if (posting && page.description.length >= 200) {
+        const cache = await storageGet<Record<string, CachedJD>>("jdCache", {});
+        await storageSet({ jdCache: rememberJD(cache, page, Date.now()) });
+      }
+    }
+    fields = extractLiveFields(document);
+    const isForm = isApplicationForm(fields);
+    if (!isForm && !posting) return;
+    const { jd, source } = await currentJD();
+    Object.assign(ui, {
+      mode: isForm ? "form" : "posting",
+      title: jd.title,
+      company: jd.company,
+      jdSource: source,
+    });
+    widget ??= mountWidget(document, handlers, isTop ? "bottom" : "top");
+    widget.render(ui);
+  }
+
+  const handlers = {
+    onRun: async () => {
+      if (ui.busy) return;
+      Object.assign(ui, { busy: true, lines: [], injected: [], skipped: [], canOpenPdf: false });
+      widget?.render(ui);
+      fields = extractLiveFields(document);
+      const { jd, source } = await currentJD();
+      ranFill = true;
+      const report = await runOneClick({
+        doc: document,
+        fields,
+        jd,
+        jdSource: source,
+        keywords: ui.keywords,
+        send: async (msg: unknown) => {
+          const res = await send(msg);
+          if ((msg as { type?: string })?.type === "TAILOR_START" && res?.jobId) {
+            last.jobId = res.jobId;
+          }
+          return res;
+        },
+        onStatus: (lines) => {
+          ui.lines = lines;
+          widget?.render(ui);
+        },
+      });
+      last.result = report.result;
+      Object.assign(ui, {
+        busy: false,
+        canOpenPdf: !!report.result,
+        injected: report.result?.keywords.injected.map((k) => k.keyword) ?? [],
+        skipped: report.result?.keywords.skipped ?? [],
+      });
+      widget?.render(ui);
+    },
+    onKeywordsChange: async (keywords: string[]) => {
+      ui.keywords = keywords;
+      await storageSet({ keywords });
+      widget?.render(ui);
+    },
+    onDismissJD: async () => {
+      ignoreRecent = true;
+      await refresh(false);
+    },
+    onOpenPdf: async () => {
+      if (!last.jobId) return;
+      const pdf = await send({ type: "FETCH_PDF", jobId: last.jobId, kind: "resume" });
+      if (pdf?.base64) {
+        window.open(
+          URL.createObjectURL(base64ToFile(pdf.base64, last.result?.fileName ?? "resume.pdf")),
+        );
+      }
+    },
+    onDetails: () => void send({ type: "OPEN_SIDE_PANEL" }),
+    onToggle: () => {
+      ui.collapsed = !ui.collapsed;
+      widget?.render(ui);
+    },
+  };
+
+  // The user's own submit click marks the application applied (never ours).
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!ranFill || !(e.target instanceof Element) || !isSubmitControl(e.target)) return;
+      ranFill = false;
+      void send({ type: "MARK_APPLIED", jobUrl: page.url, company: ui.company, jobTitle: ui.title });
+    },
+    true,
+  );
+
+  // Wizards (Workday, LinkedIn Easy Apply, Ashby) inject fields later; SPAs
+  // change the job without a page load.
+  watchForInjectedFields(document, () => void refresh(false));
+  let lastUrl = location.href;
+  setInterval(() => {
+    if (location.href === lastUrl) return;
+    lastUrl = location.href;
+    void refresh(true);
+  }, 1000);
+
+  await refresh(true);
+}
+
+if (inExtension && typeof document !== "undefined" && document.body) {
+  void main();
 }
