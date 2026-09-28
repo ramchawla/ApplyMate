@@ -1,28 +1,43 @@
 import { randomBytes } from "node:crypto";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "./server";
 import { OutputStore } from "./store";
+import { makeTailorJob } from "./tailor-job";
 import { openDb, migrate } from "../../../lib/local/db";
 
 const PORT = Number(process.env.APPLYMATE_BRIDGE_PORT ?? 4179);
-
-// Generate a per-run bearer token and persist it with 0600 perms so the skill
-// (and the user, pasting it into the extension once) can authenticate. Other
-// local users/processes cannot read the token or call the protected API.
-const token = process.env.APPLYMATE_BRIDGE_TOKEN ?? randomBytes(24).toString("hex");
-const dir = join(homedir(), ".applymate");
+const dir = process.env.APPLYMATE_DIR ?? join(homedir(), ".applymate");
 mkdirSync(dir, { recursive: true });
-writeFileSync(join(dir, "bridge-token"), token, { mode: 0o600 });
 
-const store = new OutputStore();
+// Reuse the token across restarts so the extension stays paired.
+const tokenPath = join(dir, "bridge-token");
+function loadToken(): string {
+  if (process.env.APPLYMATE_BRIDGE_TOKEN) return process.env.APPLYMATE_BRIDGE_TOKEN;
+  try {
+    const existing = readFileSync(tokenPath, "utf8").trim();
+    if (existing) return existing;
+  } catch {
+    /* first run */
+  }
+  const fresh = randomBytes(24).toString("hex");
+  writeFileSync(tokenPath, fresh, { mode: 0o600 });
+  return fresh;
+}
+const token = loadToken();
+
 const db = openDb();
 migrate(db);
-const server = createServer(store, { token, db });
+const server = createServer(new OutputStore(), {
+  token,
+  db,
+  tailor: makeTailorJob({ dir, db }),
+  profilePath: join(dir, "profile.yaml"),
+  pairFile: join(dir, "paired-extension"),
+});
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`[ApplyMate] bridge listening on http://127.0.0.1:${PORT}`);
-  console.log(`[ApplyMate] bridge token: ${token}`);
-  console.log("[ApplyMate] token saved to ~/.applymate/bridge-token");
+  console.log(`[ApplyMate] token in ${tokenPath} (the extension pairs automatically)`);
 });
