@@ -1,0 +1,46 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Senior Platform Engineer - Acme</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"JobPosting","title":"Senior Platform Engineer","hiringOrganization":{"@type":"Organization","name":"Acme Robotics"},"description":"<p>We are hiring a Senior Platform Engineer to build our internal developer platform on Kubernetes. You will own CI/CD with GitHub Actions, infrastructure as code with Terraform, observability, and secure service-to-service authentication. 5+ years of experience building distributed systems. Bonus: experience with LLM tooling, MCP servers, and developer productivity.</p>"}</script>
+<style>body{font-family:system-ui;max-width:720px;margin:24px auto} label{display:block;margin-top:12px;font-weight:600} input,select,textarea{width:100%;padding:6px} .menu div{padding:4px;border:1px solid #ddd;cursor:pointer}</style>
+</head><body>
+<h1>Senior Platform Engineer</h1><p>Acme Robotics · Toronto</p>
+<div id="content"><p>We are hiring a Senior Platform Engineer to build our internal developer platform on Kubernetes. You will own CI/CD with GitHub Actions, infrastructure as code with Terraform, observability, and secure service-to-service authentication. 5+ years of experience building distributed systems. Bonus: experience with LLM tooling, MCP servers, and developer productivity.</p></div>
+<form id="application_form" onsubmit="event.preventDefault()">
+  <label for="first_name">First Name *</label><input id="first_name" name="first_name" required>
+  <label for="last_name">Last Name *</label><input id="last_name" name="last_name" required>
+  <label for="email">Email *</label><input id="email" name="email" type="email" required>
+  <label for="phone">Phone</label><input id="phone" name="phone" type="tel">
+  <label for="resume">Resume/CV *</label><input id="resume" name="resume" type="file" accept=".pdf" required>
+  <div id="resume-name">No file chosen</div>
+  <label for="linkedin">LinkedIn Profile</label><input id="linkedin" name="urls[LinkedIn]">
+  <label for="q_why">Why do you want to work at Acme Robotics? *</label><textarea id="q_why" name="q_why" required></textarea>
+  <label for="q_auth">Are you legally authorized to work in Canada? *</label>
+  <select id="q_auth" name="q_auth" required><option value="">Select...</option><option value="1">Yes</option><option value="0">No</option></select>
+  <label for="gender">Gender</label>
+  <div class="select__control"><input id="gender" role="combobox" autocomplete="off"></div>
+  <div id="gender-menu" class="menu"></div><input type="hidden" id="gender-value" name="gender">
+  <fieldset><legend>Veteran Status</legend>
+    <label><input type="radio" name="veteran" value="1"> I am a protected veteran</label>
+    <label><input type="radio" name="veteran" value="2"> I am not a protected veteran</label>
+    <label><input type="radio" name="veteran" value="3"> I don't wish to answer</label>
+  </fieldset>
+  <button type="submit">Submit application</button>
+</form>
+<script>
+  document.getElementById("resume").addEventListener("change", (e) => {
+    const f = e.target.files[0];
+    document.getElementById("resume-name").textContent = f ? f.name + " (" + f.size + " bytes)" : "No file chosen";
+  });
+  const input = document.getElementById("gender"), menu = document.getElementById("gender-menu");
+  const OPTIONS = ["Male", "Female", "Non-binary", "I don't wish to answer"];
+  function render(filter) {
+    menu.replaceChildren(...OPTIONS.filter(o => !filter || o.toLowerCase().includes(filter.toLowerCase())).map(o => {
+      const el = document.createElement("div"); el.setAttribute("role", "option"); el.textContent = o;
+      el.addEventListener("click", () => { document.getElementById("gender-value").value = o; input.value = o; menu.replaceChildren(); });
+      return el;
+    }));
+  }
+  input.addEventListener("keydown", (e) => { if (e.key === "ArrowDown") setTimeout(() => render(""), 30); });
+  input.addEventListener("input", () => setTimeout(() => render(input.value), 30));
+</script>
+</body></html>

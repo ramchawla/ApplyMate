@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Acme Robotics - Staff DevOps Engineer</title></head><body>
+<h2>Submit your application</h2>
+<form onsubmit="event.preventDefault()"><ul>
+  <li class="application-question"><div class="application-label">Resume/CV *</div><div class="application-field"><input type="file" name="resume" required></div><div id="resume-name">No file</div></li>
+  <li class="application-question"><div class="application-label">Full name *</div><div class="application-field"><input type="text" name="name" required></div></li>
+  <li class="application-question"><div class="application-label">Email *</div><div class="application-field"><input type="email" name="email" required></div></li>
+  <li class="application-question"><div class="application-label">Phone</div><div class="application-field"><input type="text" name="phone"></div></li>
+  <li class="application-question"><div class="application-label">Current company</div><div class="application-field"><input type="text" name="org"></div></li>
+  <li class="application-question"><div class="application-label">GitHub URL</div><div class="application-field"><input type="text" name="urls[GitHub]"></div></li>
+  <li class="application-question"><div class="application-label">Will you now or in the future require sponsorship for employment visa status? *</div>
+    <div class="application-field"><ul><li><label><input type="radio" name="cards[0][field0]" value="Yes" required>Yes</label></li><li><label><input type="radio" name="cards[0][field0]" value="No">No</label></li></ul></div></li>
+  <li class="application-question"><div class="application-label">What excites you about infrastructure work at Acme? *</div><div class="application-field"><textarea name="cards[1][field0]" required></textarea></div></li>
+  <li class="application-question"><div class="application-label">Additional information</div><div class="application-field"><textarea name="comments" placeholder="Add a cover letter or anything else you want to share."></textarea></div></li>
+</ul><button type="submit">Submit application</button></form>
+<script>document.querySelector("input[name=resume]").addEventListener("change",e=>{const f=e.target.files[0];document.getElementById("resume-name").textContent=f?f.name:"No file";});</script>
+</body></html>
