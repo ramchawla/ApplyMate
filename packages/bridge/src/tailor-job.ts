@@ -6,6 +6,7 @@ import { compileLatexWithPages } from "../../../lib/local/compile-latex";
 import { tailorResume, type TailorDeps } from "../../skill/src/tailor/run";
 import { runClaude, type ClaudeRunner } from "../../skill/src/tailor/claude-cli";
 import { profileName } from "../../skill/src/tailor/letter";
+import { answerQuestions, type AnswerRequest } from "../../skill/src/tailor/answer";
 import {
   applicationDirName,
   deterministicAppId,
@@ -107,4 +108,14 @@ export function makeTailorJob(opts: {
       coverLetterPdf: out.coverLetterPdf,
     };
   };
+}
+
+export function makeAnswerJob(opts: { dir: string; runner?: ClaudeRunner }) {
+  const optional = (f: string) => readFile(join(opts.dir, f), "utf8").catch(() => "");
+  return async (req: AnswerRequest) =>
+    answerQuestions(
+      req,
+      { corpusYaml: await optional("experience.yaml"), profileYaml: await optional("profile.yaml") },
+      { runClaude: opts.runner ?? runClaude, claudeCwd: opts.dir },
+    );
 }

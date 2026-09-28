@@ -10,6 +10,7 @@ import { JobQueue } from "./jobs";
 import { markApplied } from "./persist";
 import type { TailorJobResult } from "./tailor-job";
 import type { TailorRequest } from "../../../lib/shared/types";
+import type { AnswerRequest, Answers } from "../../skill/src/tailor/answer";
 
 export interface ServerOptions {
   // When set, every route except /health and /pair requires
@@ -20,6 +21,9 @@ export interface ServerOptions {
   // One-click tailoring: runs behind an async job queue (MV3 service workers
   // can die during a single 60s fetch, so the extension polls instead).
   tailor?: (req: TailorRequest) => Promise<TailorJobResult>;
+  // Answers-only call for later wizard steps; its own queue so it can run
+  // while a tailoring job is still going.
+  answer?: (req: AnswerRequest) => Promise<Answers>;
   // ~/.applymate/profile.yaml, served to the extension for instant fill.
   profilePath?: string;
   // Records the first extension origin that paired (trust on first use).
@@ -117,6 +121,9 @@ export function createServer(options: ServerOptions = {}): Server {
   const jobs = options.tailor
     ? new JobQueue<TailorRequest, TailorJobResult>(options.tailor)
     : null;
+  const answerJobs = options.answer
+    ? new JobQueue<AnswerRequest, Answers>(options.answer)
+    : null;
 
   return createHttpServer((req, res) => {
     const url = req.url ?? "/";
@@ -197,6 +204,26 @@ export function createServer(options: ServerOptions = {}): Server {
         return;
       }
       return send(200, { status: job.status, error: job.error, result: job.result?.result });
+    }
+
+    if (req.method === "POST" && url === "/answer") {
+      if (!answerJobs) return send(503, { error: "answering not configured" });
+      readJson(req).then(
+        (parsed) => {
+          const valid = validateTailorRequest(parsed);
+          if (typeof valid === "string") return send(400, { error: valid });
+          return send(202, { jobId: answerJobs.enqueue({ job: valid.job, fields: valid.fields }) });
+        },
+        (err: Error) => send(400, { error: err.message }),
+      );
+      return;
+    }
+
+    const answerMatch = url.match(/^\/answer\/([\w-]+)$/);
+    if (req.method === "GET" && answerMatch && answerJobs) {
+      const job = answerJobs.get(answerMatch[1]);
+      if (!job) return send(404, { error: "unknown job" });
+      return send(200, { status: job.status, error: job.error, answers: job.result?.answers });
     }
 
     if (req.method === "GET" && url === "/profile") {

@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "./server";
-import { makeTailorJob } from "./tailor-job";
+import { makeAnswerJob, makeTailorJob } from "./tailor-job";
 import { openDb, migrate } from "../../../lib/local/db";
 
 const PORT = Number(process.env.APPLYMATE_BRIDGE_PORT ?? 4179);
@@ -32,6 +32,7 @@ const server = createServer({
   token,
   db,
   tailor: makeTailorJob({ dir, db }),
+  answer: makeAnswerJob({ dir }),
   profilePath: join(dir, "profile.yaml"),
   pairFile: join(dir, "paired-extension"),
 });

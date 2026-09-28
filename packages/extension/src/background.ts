@@ -7,6 +7,8 @@ type BgMessage =
   | { type: "GET_PROFILE" }
   | { type: "TAILOR_START"; request: TailorRequest }
   | { type: "TAILOR_POLL"; jobId: string }
+  | { type: "ANSWER_START"; request: Pick<TailorRequest, "job" | "fields"> }
+  | { type: "ANSWER_POLL"; jobId: string }
   | { type: "FETCH_PDF"; jobId: string; kind: "resume" | "cover-letter" }
   | { type: "MARK_APPLIED"; jobUrl: string; company: string; jobTitle: string }
   | { type: "RUN_REPORT"; report: RunReport }
@@ -73,6 +75,10 @@ async function handle(msg: BgMessage, sender: chrome.runtime.MessageSender): Pro
       return json(await bridgeFetch("/tailor", post(msg.request)));
     case "TAILOR_POLL":
       return json(await bridgeFetch(`/tailor/${encodeURIComponent(msg.jobId)}`));
+    case "ANSWER_START":
+      return json(await bridgeFetch("/answer", post(msg.request)));
+    case "ANSWER_POLL":
+      return json(await bridgeFetch(`/answer/${encodeURIComponent(msg.jobId)}`));
     case "FETCH_PDF": {
       const res = await bridgeFetch(
         `/tailor/${encodeURIComponent(msg.jobId)}/${msg.kind}.pdf`,
