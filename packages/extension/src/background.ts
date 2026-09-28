@@ -1,96 +1,90 @@
-import { ExtractedJobData } from "./types";
+import { bridgeFetch } from "./utils/bridge";
+import { getProfile, normalizeProfile, saveProfile } from "./utils/profile";
+import type { Profile, RunReport, TailorRequest } from "./types";
 
-console.log("[ApplyMate] Background service worker started");
+type BgMessage =
+  | { type: "GET_PROFILE" }
+  | { type: "TAILOR_START"; request: TailorRequest }
+  | { type: "TAILOR_POLL"; jobId: string }
+  | { type: "FETCH_PDF"; jobId: string; kind: "resume" | "cover-letter" }
+  | { type: "MARK_APPLIED"; jobUrl: string; company: string; jobTitle: string }
+  | { type: "RUN_REPORT"; report: RunReport }
+  | { type: "OPEN_SIDE_PANEL" };
 
-// Open the side panel when the toolbar icon is clicked. This is the reliable
-// path: sidePanel.open() requires a user gesture, and a message round-trip from
-// an in-page button loses that gesture context.
 chrome.runtime.onInstalled.addListener(() => {
-  if (chrome.sidePanel?.setPanelBehavior) {
-    chrome.sidePanel
-      .setPanelBehavior({ openPanelOnActionClick: true })
-      .catch((error) =>
-        console.error("[ApplyMate] setPanelBehavior failed:", error),
-      );
+  void chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => {});
+});
+
+chrome.runtime.onMessage.addListener((msg: BgMessage, sender, sendResponse) => {
+  // sidePanel.open() needs the user gesture that is only alive synchronously.
+  if (msg?.type === "OPEN_SIDE_PANEL") {
+    if (sender.tab?.id !== undefined) {
+      void chrome.sidePanel.open({ tabId: sender.tab.id }).catch(() => {});
+    }
+    sendResponse({});
+    return false;
   }
+  handle(msg, sender).then(sendResponse, (err: unknown) =>
+    sendResponse({ error: err instanceof Error ? err.message : String(err) }),
+  );
+  return true;
 });
 
-chrome.commands?.onCommand.addListener((command) => {
-  if (command !== "trigger-extract") return;
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const tabId = tabs[0]?.id;
-    if (tabId === undefined) return;
-    chrome.tabs.sendMessage(tabId, { type: "EXTRACT_JOB_DATA" }, () => {
-      void chrome.runtime.lastError; // ignore if no content script on page
-    });
-    void openSidePanel();
-  });
-});
-
-chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
-  switch (request?.type) {
-    case "JOB_EXTRACTED":
-      void handleJobExtracted(request.data as ExtractedJobData);
-      sendResponse({ status: "received" });
-      return false;
-
-    case "ERROR":
-      console.error("[ApplyMate] Content script error:", request.error);
-      sendResponse({ status: "error_logged" });
-      return false;
-
-    case "OPEN_SIDE_PANEL":
-      void openSidePanel();
-      sendResponse({ status: "side_panel_opened" });
-      return false;
-
-    case "REQUEST_REEXTRACT":
-      // Side panel asks for a fresh extraction once it is open. The page DOM
-      // has usually settled by now (SPA forms rendered), so this catches form
-      // fields the one-shot document_idle pass may have missed.
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const tabId = tabs[0]?.id;
-        if (tabId === undefined) return;
-        chrome.tabs.sendMessage(tabId, { type: "EXTRACT_JOB_DATA" }, () => {
-          void chrome.runtime.lastError; // ignore if no content script on page
-        });
-      });
-      sendResponse({ status: "reextract_requested" });
-      return false;
-
-    case "GET_EXTRACTED_DATA":
-      chrome.storage.session.get("lastExtractedJobData", (result) => {
-        sendResponse({ data: result.lastExtractedJobData ?? null });
-      });
-      return true; // async response
-
-    default:
-      return false;
-  }
-});
-
-async function handleJobExtracted(data: ExtractedJobData): Promise<void> {
-  await chrome.storage.session.set({ lastExtractedJobData: data });
-  console.log("[ApplyMate] Stored extracted job data in session:", data.id);
-  await openSidePanel();
+async function json(res: Response): Promise<unknown> {
+  if (!res.ok) throw new Error(`bridge ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return res.json();
 }
 
-async function openSidePanel(): Promise<void> {
-  if (!chrome.sidePanel) {
-    console.warn("[ApplyMate] sidePanel API not available");
-    return;
+function toBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   }
+  return btoa(bin);
+}
 
+async function freshProfile(): Promise<Profile> {
   try {
-    const [tab] = await chrome.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
-    if (tab?.id !== undefined) {
-      await chrome.sidePanel.open({ tabId: tab.id });
-      console.log("[ApplyMate] Side panel opened");
+    const res = await bridgeFetch("/profile");
+    if (res.ok) {
+      const profile = normalizeProfile(await res.json());
+      await saveProfile(profile);
+      return profile;
     }
-  } catch (error) {
-    console.error("[ApplyMate] Failed to open side panel:", error);
+  } catch {
+    // bridge offline — use the cached copy
+  }
+  return getProfile();
+}
+
+async function handle(msg: BgMessage, sender: chrome.runtime.MessageSender): Promise<unknown> {
+  const post = (body: unknown): RequestInit => ({
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  switch (msg.type) {
+    case "GET_PROFILE":
+      return freshProfile();
+    case "TAILOR_START":
+      return json(await bridgeFetch("/tailor", post(msg.request)));
+    case "TAILOR_POLL":
+      return json(await bridgeFetch(`/tailor/${encodeURIComponent(msg.jobId)}`));
+    case "FETCH_PDF": {
+      const res = await bridgeFetch(
+        `/tailor/${encodeURIComponent(msg.jobId)}/${msg.kind}.pdf`,
+      );
+      if (!res.ok) throw new Error(`bridge ${res.status}`);
+      return { base64: toBase64(await res.arrayBuffer()) };
+    }
+    case "MARK_APPLIED":
+      await json(await bridgeFetch("/applications/applied", post(msg)));
+      return { ok: true };
+    case "RUN_REPORT":
+      await chrome.storage.session.set({ [`lastRun:${sender.tab?.id ?? "x"}`]: msg.report });
+      return { ok: true };
+    default:
+      throw new Error("unknown message");
   }
 }
