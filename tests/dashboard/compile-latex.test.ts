@@ -6,6 +6,7 @@ import {
   compileLatex,
   compileLatexWithPages,
   parsePageCount,
+  parseFit,
   TectonicMissingError,
   toTectonicCompat,
 } from "../../lib/local/compile-latex";
@@ -80,4 +81,21 @@ describe("compileLatexWithPages", () => {
     expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
     expect(pages).toBe(1);
   }, 180000);
+
+  it("reports natural content height and page goal", async () => {
+    if (!(await hasTectonic())) return;
+    const { height, goal } = await compileLatexWithPages(readFileSync(FIXTURE, "utf8"));
+    expect(goal).toBeGreaterThan(600);
+    expect(height).toBeGreaterThan(100);
+  }, 180000);
+});
+
+describe("parseFit", () => {
+  it("reads natural height and goal from the probe line", () => {
+    expect(parseFit("x\nAMFIT total=798.15698pt goal=751.60756pt\n")).toEqual({
+      height: 798.15698,
+      goal: 751.60756,
+    });
+    expect(parseFit("")).toEqual({ height: 0, goal: 0 });
+  });
 });

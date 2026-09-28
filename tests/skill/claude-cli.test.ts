@@ -30,6 +30,19 @@ describe("runClaude", () => {
     expect(out.args).toContain("--no-session-persistence");
     expect(out.args).not.toContain("--bare");
     expect(out.noClaudeMd).toBe("1");
+    expect(arg("--effort")).toBe("low");
+  });
+
+  it("lets APPLYMATE_EFFORT override the effort level", async () => {
+    process.env.APPLYMATE_EFFORT = "high";
+    try {
+      const out = (await runClaude({ bin: FAKE, system: "s", prompt: "p", schema: {} })) as {
+        args: string[];
+      };
+      expect(out.args[out.args.indexOf("--effort") + 1]).toBe("high");
+    } finally {
+      delete process.env.APPLYMATE_EFFORT;
+    }
   });
 
   it("rejects when claude reports an error", async () => {

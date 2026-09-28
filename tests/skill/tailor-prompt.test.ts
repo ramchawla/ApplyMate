@@ -52,6 +52,12 @@ describe("buildTailorPrompt", () => {
     expect(p).toContain("Lead with X");
     expect(p).toContain("name: {first: Jane}");
   });
+  it("gives every part a character budget equal to its current length", () => {
+    const b0 = ctx.doc.parts.find((x) => x.id === "r0.b0")!;
+    expect(p).toContain(`[r0.b0] (max ${b0.text.length} chars) ${b0.text}`);
+    expect(TAILOR_SYSTEM).toMatch(/max N chars/);
+  });
+
   it("says so when the JD is unavailable", () => {
     const q = buildTailorPrompt({ ...req, job: { ...req.job, description: "" } }, ctx);
     expect(q).toMatch(/not available/i);
@@ -75,6 +81,21 @@ describe("schema + system", () => {
 });
 
 describe("parseTailorOutput", () => {
+  it("strips an echoed [id] prefix from edits", () => {
+    const out = parseTailorOutput({
+      edits: [
+        { id: "r1.b0", latex: "[r1.b0] Designed \\textbf{x}" },
+        { id: "skills.technologies", latex: " [skills.technologies]  Kubernetes, Go" },
+        { id: "summary", latex: "[other] keep" },
+      ],
+    });
+    expect(out.edits.map((e) => e.latex)).toEqual([
+      "Designed \\textbf{x}",
+      "Kubernetes, Go",
+      "[other] keep",
+    ]);
+  });
+
   it("normalizes missing and malformed parts", () => {
     const out = parseTailorOutput({
       edits: [{ id: "r0.b0", latex: "x" }, { id: 3 }],

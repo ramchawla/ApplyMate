@@ -5,6 +5,7 @@ export interface ClaudeRunOptions {
   prompt: string;
   schema: object;
   model?: string;
+  effort?: string;
   cwd?: string;
   timeoutMs?: number;
   bin?: string;
@@ -24,6 +25,8 @@ export const runClaude: ClaudeRunner = (opts) =>
       "-p",
       "--output-format", "json",
       "--model", opts.model ?? process.env.APPLYMATE_MODEL ?? "sonnet",
+      // Low effort keeps a tailoring run near a minute; bump for quality.
+      "--effort", opts.effort ?? process.env.APPLYMATE_EFFORT ?? "low",
       "--tools", "",
       "--no-session-persistence",
       "--setting-sources", "project",

@@ -1,5 +1,5 @@
 import { parseResume, renderResume } from "./resume-doc";
-import { latexProblem, editWarnings, keywordWarnings } from "./checks";
+import { latexProblem, editWarnings, keywordWarnings, droppedItems } from "./checks";
 import { buildTailorPrompt, parseTailorOutput, TAILOR_SCHEMA, TAILOR_SYSTEM } from "./prompt";
 import { coverLetterTex, profileName } from "./letter";
 import type { ClaudeRunner } from "./claude-cli";
@@ -17,9 +17,16 @@ export interface TailorFiles {
   profileYaml: string;
 }
 
+export interface Compiled {
+  pdf: Buffer;
+  pages: number;
+  height?: number;
+  goal?: number;
+}
+
 export interface TailorDeps {
   runClaude: ClaudeRunner;
-  compile: (latex: string) => Promise<{ pdf: Buffer; pages: number }>;
+  compile: (latex: string) => Promise<Compiled>;
   claudeCwd?: string;
 }
 
@@ -36,6 +43,10 @@ export interface TailorOutcome {
 }
 
 const MAX_FIT_ROUNDS = 10;
+// One text line (~11pt). TeX absorbs a single extra line in glue without
+// headings colliding (checked visually on the real master); two lines don't.
+const HEIGHT_SLACK_PT = 12;
+const FIT_REVERT_REASON = "reverted to keep the resume on one page";
 
 export async function tailorResume(
   req: TailorRequest,
@@ -75,7 +86,13 @@ export async function tailorResume(
     const problem = latexProblem(e.latex);
     edits.push({ id: e.id, before: part.text, after: e.latex, reverted: problem ?? undefined });
     if (problem) warnings.push(`${e.id}: reverted (${problem})`);
-    else warnings.push(...editWarnings(e.id, part.text, e.latex, groundMetrics));
+    else {
+      warnings.push(...editWarnings(e.id, part.text, e.latex, groundMetrics));
+      if (part.kind === "skills") {
+        const dropped = droppedItems(part.text, e.latex);
+        if (dropped.length) warnings.push(`${e.id}: dropped ${dropped.join(", ")}`);
+      }
+    }
   }
 
   const order: Record<string, string[]> = {};
@@ -90,23 +107,47 @@ export async function tailorResume(
   const active = () =>
     Object.fromEntries(edits.filter((e) => !e.reverted).map((e) => [e.id, e.after]));
 
+  // "Fits" = one page AND no taller than the master's natural height. A
+  // longer resume still compiles to one page because TeX shrinks glue, but
+  // then headings collide with bullets; the master is the user's own
+  // accepted density.
+  const master = await deps.compile(files.masterTex);
+  const budget = Math.max(master.height ?? 0, master.goal ?? 0);
+  const fits = (c: Compiled) =>
+    c.pages <= 1 && (!budget || !c.height || c.height <= budget + HEIGHT_SLACK_PT);
+
   let tex = renderResume(doc, active(), order);
-  let compiled: { pdf: Buffer; pages: number };
+  let compiled: Compiled;
   try {
-    compiled = await deps.compile(tex);
-    for (let round = 0; compiled.pages > 1 && round < MAX_FIT_ROUNDS; round++) {
+    compiled = tex === files.masterTex ? master : await deps.compile(tex);
+    for (let round = 0; !fits(compiled) && round < MAX_FIT_ROUNDS; round++) {
       const victim = edits
         .filter((e) => !e.reverted)
         .sort(
           (a, b) => b.after.length - b.before.length - (a.after.length - a.before.length),
         )[0];
       if (!victim) break;
-      victim.reverted = "reverted to keep the resume on one page";
+      victim.reverted = FIT_REVERT_REASON;
       tex = renderResume(doc, active(), order);
       compiled = await deps.compile(tex);
     }
-    if (compiled.pages > 1) {
-      warnings.push(`Resume is ${compiled.pages} pages even with all edits reverted`);
+    // Greedy-by-characters over-reverts: an edit can grow a lot yet wrap
+    // into the same lines. Try each fit-reverted edit back, smallest first.
+    const growth = (e: EditRecord) => e.after.length - e.before.length;
+    const retry = edits.filter((e) => e.reverted === FIT_REVERT_REASON).sort((a, b) => growth(a) - growth(b));
+    for (const e of fits(compiled) ? retry : []) {
+      e.reverted = undefined;
+      const candidateTex = renderResume(doc, active(), order);
+      const candidate = await deps.compile(candidateTex);
+      if (fits(candidate)) {
+        tex = candidateTex;
+        compiled = candidate;
+      } else {
+        e.reverted = FIT_REVERT_REASON;
+      }
+    }
+    if (!fits(compiled)) {
+      warnings.push("Resume is longer than your master even with all edits reverted");
     }
   } catch (err) {
     for (const e of edits) e.reverted ??= "compile error";
@@ -116,7 +157,7 @@ export async function tailorResume(
       ).slice(0, 200)}`,
     );
     tex = files.masterTex;
-    compiled = await deps.compile(tex);
+    compiled = master;
   }
 
   let coverLetterPdf: Buffer | undefined;

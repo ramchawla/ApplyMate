@@ -13,6 +13,11 @@ export class TectonicMissingError extends Error {
 export interface CompileResult {
   pdf: Buffer;
   pages: number;
+  // Natural (unshrunk) height of the last page's content and the page goal,
+  // in pt. height > goal means TeX squeezed the glue to make it fit — past
+  // the master's own squeeze, headings start colliding with bullets.
+  height: number;
+  goal: number;
 }
 
 // FontAwesome 5 codepoints for icons resume headers commonly use.
@@ -62,6 +67,19 @@ export function parsePageCount(log: string): number {
   return m ? Number(m[1]) : 0;
 }
 
+const FIT_PROBE =
+  "\\par\\penalty0\\typeout{AMFIT total=\\the\\pagetotal\\space goal=\\the\\pagegoal}";
+
+function withFitProbe(tex: string): string {
+  const i = tex.lastIndexOf("\\end{document}");
+  return i === -1 ? tex : tex.slice(0, i) + FIT_PROBE + tex.slice(i);
+}
+
+export function parseFit(log: string): { height: number; goal: number } {
+  const m = log.match(/AMFIT total=([\d.]+)pt goal=([\d.]+)pt/);
+  return m ? { height: Number(m[1]), goal: Number(m[2]) } : { height: 0, goal: 0 };
+}
+
 export async function compileLatexWithPages(
   latex: string,
   binary = "tectonic",
@@ -69,11 +87,11 @@ export async function compileLatexWithPages(
   const dir = await mkdtemp(join(tmpdir(), "applymate-tex-"));
   const texPath = join(dir, "resume.tex");
   try {
-    await writeFile(texPath, toTectonicCompat(latex), "utf8");
+    await writeFile(texPath, withFitProbe(toTectonicCompat(latex)), "utf8");
     await runTectonic(binary, texPath, dir);
     const pdf = await readFile(join(dir, "resume.pdf"));
     const log = await readFile(join(dir, "resume.log"), "utf8").catch(() => "");
-    return { pdf, pages: parsePageCount(log) };
+    return { pdf, pages: parsePageCount(log), ...parseFit(log) };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

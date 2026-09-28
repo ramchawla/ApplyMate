@@ -65,3 +65,10 @@ export function keywordWarnings(
         `"${k.keyword}" (${k.where}) isn't in your corpus or master resume — reframed; make sure you can speak to it`,
     );
 }
+
+// Comma-list items present before but missing after (skills lines).
+export function droppedItems(before: string, after: string): string[] {
+  const items = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
+  const kept = new Set(items(after).map((x) => x.toLowerCase()));
+  return items(before).filter((x) => !kept.has(x.toLowerCase()));
+}

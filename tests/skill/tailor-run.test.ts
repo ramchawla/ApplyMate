@@ -117,6 +117,70 @@ describe("tailorResume", () => {
     expect(out.edits.find((e) => e.id === "r0.b0")!.reverted).toBeUndefined();
   });
 
+  it("reverts growth that would squeeze the page past the master's natural height", async () => {
+    // One page, but taller than the master: TeX shrinks the glue and headings
+    // collide. Height tracks length here.
+    const out = await tailorResume(req, files, {
+      compile: async (latex) => ({
+        pdf: Buffer.from("x"),
+        pages: 1,
+        height: latex.length / 10,
+        goal: masterTex.length / 10 - 50,
+      }),
+      runClaude: runner({
+        edits: [
+          {
+            id: "r1.b0",
+            latex: `Migrated \\textbf{15+ services} to \\textbf{Kubernetes}${" and more".repeat(20)}.`,
+          },
+          { id: "r0.b1", latex: "Cut CI by \\textbf{40\\%}." },
+        ],
+      }),
+    });
+    expect(out.edits.find((e) => e.id === "r1.b0")!.reverted).toMatch(/one page/);
+    expect(out.edits.find((e) => e.id === "r0.b1")!.reverted).toBeUndefined();
+  });
+
+  it("keeps growth of up to one text line over the master (TeX absorbs it cleanly)", async () => {
+    const out = await tailorResume(req, files, {
+      compile: async (latex) => ({
+        pdf: Buffer.from("x"),
+        pages: 1,
+        height: latex === masterTex ? 700 : 711,
+        goal: 690,
+      }),
+      runClaude: runner({ edits: [{ id: "r0.b1", latex: "Cut CI time by \\textbf{40\\%} with parallel \\textbf{GitHub Actions} matrix jobs." }] }),
+    });
+    expect(out.edits[0].reverted).toBeUndefined();
+  });
+
+  it("re-applies edits the greedy pass reverted unnecessarily", async () => {
+    // A grows a lot but wraps into the same lines; B grows a little but adds
+    // a line. Greedy reverts A first, then B; add-back must restore A.
+    const A = `Migrated \\textbf{15+ services} to \\textbf{Kubernetes}${" x".repeat(150)}.`;
+    const B = "Cut CI time by \\textbf{40\\%} with parallel \\textbf{GitHub Actions} jobs today.";
+    const out = await tailorResume(req, files, {
+      compile: async (latex) => ({
+        pdf: Buffer.from("x"),
+        pages: 1,
+        height: 700 + (latex.includes("jobs today") ? 20 : 0),
+        goal: 690,
+      }),
+      runClaude: runner({ edits: [{ id: "r1.b0", latex: A }, { id: "r0.b1", latex: B }] }),
+    });
+    expect(out.edits.find((e) => e.id === "r1.b0")!.reverted).toBeUndefined();
+    expect(out.edits.find((e) => e.id === "r0.b1")!.reverted).toMatch(/one page/);
+    expect(out.tex).toContain(" x x x");
+  });
+
+  it("warns when a skills line drops items", async () => {
+    const out = await tailorResume(req, files, {
+      compile: onePage,
+      runClaude: runner({ edits: [{ id: "skills.technologies", latex: "Redis, Kubernetes" }] }),
+    });
+    expect(out.warnings.join("\n")).toMatch(/skills\.technologies: dropped GitHub Actions/);
+  });
+
   it("falls back to the master resume when the edited resume fails to compile", async () => {
     const out = await tailorResume(req, files, {
       compile: async (latex) => {
