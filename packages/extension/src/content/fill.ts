@@ -10,6 +10,9 @@ import {
   typeInto,
   deepQueryAll,
   rootOf,
+  isListboxButton,
+  isPromptInput,
+  PLACEHOLDER,
 } from "./dom";
 
 export interface FillInstruction {
@@ -149,7 +152,8 @@ function fillCheckbox(el: HTMLInputElement, value: string): boolean {
   return true;
 }
 
-const OPTION_SELECTOR = "[role=option], [id*='-option-'], .select__option";
+const OPTION_SELECTOR =
+  "[role=option], [id*='-option-'], .select__option, [data-automation-id=promptOption], [data-automation-id=menuItem]";
 // Suggestion items of plain-text autocompletes (Lever location, Google Places).
 const SUGGESTION_SELECTOR = `${OPTION_SELECTOR}, .dropdown-location, [class*='dropdown-results'] > *, .pac-item`;
 const SUGGEST_CONTAINER = "[role=listbox], [class*='dropdown'], [class*='autocomplete'], [class*='suggest']";
@@ -278,7 +282,40 @@ async function fillAutocompleteText(input: HTMLInputElement, box: Element, value
   return true;
 }
 
+const keyTap = (el: HTMLElement, key: string) => {
+  el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  el.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true, cancelable: true }));
+};
+
+// Workday dropdown: press the button, pick from the listbox it opens.
+async function fillListboxButton(btn: HTMLElement, value: string): Promise<boolean> {
+  press(btn);
+  const pick = await waitForMatch(btn, value, 1500);
+  if (!pick) {
+    keyTap(btn, "Escape");
+    return false;
+  }
+  press(pick);
+  return true;
+}
+
+// Workday prompt: type, Enter to search, pick the matching result.
+async function fillPrompt(input: HTMLInputElement, value: string): Promise<boolean> {
+  input.focus();
+  typeInto(input, value.split(",")[0].trim());
+  keyTap(input, "Enter");
+  const pick = await waitForMatch(input, value, 3000);
+  if (!pick) {
+    keyTap(input, "Escape");
+    return false;
+  }
+  press(pick);
+  return true;
+}
+
 async function fillElement(el: HTMLElement, value: string): Promise<boolean> {
+  if (isListboxButton(el)) return fillListboxButton(el, value);
+  if (el instanceof HTMLInputElement && isPromptInput(el)) return fillPrompt(el, value);
   const toggles = toggleButtons(el);
   if (toggles.length) return clickMatching(toggles, value);
   if (el.getAttribute("role") === "radiogroup") {
@@ -333,6 +370,7 @@ export function attachFile(input: HTMLInputElement, file: File): boolean {
 }
 
 function isEmpty(el: HTMLElement): boolean {
+  if (isListboxButton(el)) return PLACEHOLDER.test((el.textContent ?? "").trim()) || !(el.textContent ?? "").trim();
   const toggles = toggleButtons(el);
   if (toggles.length) return !toggles.some((b) => b.getAttribute("aria-pressed") === "true");
   if (el.getAttribute("role") === "radiogroup") return !el.querySelector("[aria-checked=true]");

@@ -5,7 +5,17 @@ import {
   LONG_LABEL_TYPES,
   SHORT_LABEL_MAX,
 } from "../../../../../lib/shared/constants";
-import { FIELD_ATTR, cleanText, cssEscape, deepQueryAll, rootOf, toggleButtons } from "../dom";
+import {
+  FIELD_ATTR,
+  PLACEHOLDER,
+  cleanText,
+  cssEscape,
+  deepQueryAll,
+  isListboxButton,
+  isPromptInput,
+  rootOf,
+  toggleButtons,
+} from "../dom";
 
 // Required markers (* or Lever's ✱) end the question; ATSs append helper
 // text after them ("Current location ✱No location found…").
@@ -219,7 +229,7 @@ export function extractLiveFields(
         ? "textarea"
         : tag === "select"
           ? "select"
-          : el.getAttribute("role") === "combobox"
+          : el.getAttribute("role") === "combobox" || isPromptInput(el)
             ? "combobox"
             : ["email", "tel", "file", "checkbox", "radio", "date", "number", "url"].includes(
                   htmlType,
@@ -280,6 +290,36 @@ export function extractLiveFields(
       type: "radio",
       required: group.getAttribute("aria-required") === "true" || /\*\s*$/.test(raw.trim()),
       options: radios.map((r) => cleanText(r.getAttribute("aria-label") ?? r.textContent ?? "")),
+      extractedValueType: valueType,
+      matchConfidence: confidence,
+      validated: false,
+    });
+  }
+
+  // Dropdown buttons (Workday: button[aria-haspopup=listbox] showing "Select One").
+  for (const btn of deepQueryAll<HTMLElement>(root, "button[aria-haspopup=listbox], [role=button][aria-haspopup=listbox]")) {
+    if (!isListboxButton(btn)) continue;
+    const id = uniqueId(btn.getAttribute(FIELD_ATTR) ?? (btn.id || nextAnon()), used);
+    if (stamp) btn.setAttribute(FIELD_ATTR, id);
+    const own = (btn.textContent ?? "").trim();
+    const forLabel = btn.id ? rootOf(btn).querySelector(`label[for="${cssEscape(btn.id)}"]`)?.textContent : "";
+    // aria-labelledby often lists the button itself ("Country Select One").
+    const byIds = textOfIds(
+      (btn.getAttribute("aria-labelledby") ?? "")
+        .split(/\s+/)
+        .filter((i) => i && i !== btn.id)
+        .join(" "),
+      rootOf(btn),
+    );
+    const raw = forLabel?.trim() || byIds || questionText(btn, () => false) || btn.getAttribute("aria-label") || "";
+    const label = labelText(raw);
+    const { valueType, confidence } = inferValueType(label, "", "", "combobox");
+    fields.push({
+      id,
+      label,
+      type: "combobox",
+      placeholder: PLACEHOLDER.test(own) ? own : "",
+      required: btn.getAttribute("aria-required") === "true" || REQUIRED_MARK.test(raw),
       extractedValueType: valueType,
       matchConfidence: confidence,
       validated: false,

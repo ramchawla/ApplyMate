@@ -88,6 +88,25 @@ export function typeInto(el: HTMLInputElement | HTMLTextAreaElement, text: strin
   }
 }
 
+// Workday-style search prompts: a searchBox input inside a multiselect/prompt
+// container. Options appear after typing + Enter.
+export function isPromptInput(el: Element): boolean {
+  if (el.getAttribute("data-automation-id") === "searchBox") return true;
+  const box = el.parentElement?.closest("[data-automation-id]");
+  const aid = (box?.getAttribute("data-automation-id") ?? "").toLowerCase();
+  return aid.includes("multiselect") || aid.includes("prompt");
+}
+
+export function isListboxButton(el: Element): boolean {
+  return (
+    el.getAttribute("aria-haspopup") === "listbox" &&
+    (el instanceof HTMLButtonElement || el.getAttribute("role") === "button")
+  );
+}
+
+// Placeholder text a dropdown shows before a choice ("Select One").
+export const PLACEHOLDER = /^(select one|select\.{0,3}|choose one|please select|--)$/i;
+
 // Yes/No-style questions built from toggle buttons (Ashby): a container whose
 // direct children include 2-6 buttons carrying aria-pressed or data-option.
 export function toggleButtons(el: Element): HTMLButtonElement[] {
