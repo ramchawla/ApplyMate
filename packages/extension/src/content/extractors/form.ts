@@ -44,14 +44,19 @@ export function inferValueType(
   return { valueType: null, confidence: 0 };
 }
 
-function labelledBy(el: Element, doc: Document): string {
-  const ids = el.getAttribute("aria-labelledby");
+// Text of the elements named by an id-list attribute (aria-labelledby,
+// aria-describedby).
+function textOfIds(ids: string | null, doc: Document): string {
   if (!ids) return "";
   return ids
     .split(/\s+/)
     .map((id) => doc.getElementById(id)?.textContent ?? "")
     .join(" ")
     .trim();
+}
+
+function labelledBy(el: Element, doc: Document): string {
+  return textOfIds(el.getAttribute("aria-labelledby"), doc);
 }
 
 // Closest label-like element that precedes `el`, isn't its container, and
@@ -131,6 +136,8 @@ export function extractLiveFields(doc: Document): FormField[] {
     const tag = el.tagName.toLowerCase();
     const htmlType = (el.getAttribute("type") ?? "").toLowerCase();
     if (tag === "input" && SKIP_TYPES.has(htmlType)) continue;
+    // Validation mirrors (Greenhouse's requiredInput beside each dropdown).
+    if (el.getAttribute("aria-hidden") === "true") continue;
 
     const input = el as HTMLInputElement;
     const groupInputs =
@@ -185,11 +192,13 @@ export function extractLiveFields(doc: Document): FormField[] {
       type,
     );
 
+    const description = cleanText(textOfIds(el.getAttribute("aria-describedby"), doc));
     fields.push({
       id,
       label,
       type,
       placeholder: el.getAttribute("placeholder") ?? "",
+      ...(description && description !== label ? { description } : {}),
       required:
         el.hasAttribute("required") ||
         el.getAttribute("aria-required") === "true" ||

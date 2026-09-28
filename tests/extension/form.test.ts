@@ -80,6 +80,30 @@ describe("extractLiveFields", () => {
     expect(f.extractedValueType).toBe("gender");
   });
 
+  it("skips aria-hidden validation inputs (Greenhouse requiredInput)", () => {
+    const d = doc(`
+      <div class="field-wrapper"><label id="q-label" for="q">Do you require visa sponsorship? <span aria-hidden="true">*</span></label>
+        <input id="q" role="combobox" aria-labelledby="q-label" aria-required="true">
+        <input required tabindex="-1" aria-hidden="true" class="requiredInput" value="">
+      </div>
+      <div class="question-description"><p>How do you pronounce your name?</p></div>`);
+    const fields = extractLiveFields(d);
+    expect(fields).toHaveLength(1);
+    expect(fields[0]).toMatchObject({ id: "q", type: "combobox", extractedValueType: "sponsorship", required: true });
+  });
+
+  it("carries the question description for Claude", () => {
+    const d = doc(`
+      <label for="why">Why Anthropic?<span aria-hidden="true">*</span></label>
+      <textarea id="why" aria-describedby="why-description why-error" aria-required="true"></textarea>
+      <div id="why-description"><p>Why do you want to work here? Great answers are 200-400 words.</p></div>
+      <div id="why-error"></div>`);
+    expect(extractLiveFields(d)[0]).toMatchObject({
+      label: "Why Anthropic?",
+      description: "Why do you want to work here? Great answers are 200-400 words.",
+    });
+  });
+
   it("marks ARIA comboboxes", () => {
     const d = doc(`<label for="loc">Location (City)</label><input id="loc" role="combobox">`);
     expect(extractLiveFields(d)[0]).toMatchObject({

@@ -36,6 +36,29 @@ describe("board extractors: greenhouse", () => {
   });
 });
 
+describe("board extractors: greenhouse job-boards (2026 markup)", () => {
+  it("takes the company from the page title, never from inline JSON", () => {
+    const doc = new DOMParser().parseFromString(
+      `<html><head><title>Job Application for Staff Engineer at Anthropic</title></head><body>
+       <h1>Staff Engineer</h1><div class="job__description">Build things.</div>
+       <script>window.__remixContext = {"company_name":"Anthropic","confirmation_message":"Thanks"}</script>
+       </body></html>`,
+      "text/html",
+    );
+    expect(extractGreenhouse(doc).company).toBe("Anthropic");
+  });
+});
+
+describe("extractJD company sanity", () => {
+  it("drops a generic company match that is really inline JSON", () => {
+    const html = `<html><body><h1>Engineer</h1><p>We build.</p>
+      <script>{"company_name":"Acme","confirmation_message":"<h2>Thanks</h2>"}</script></body></html>`;
+    const c = extractJD(html, "greenhouse").company;
+    expect(c).not.toMatch(/["{}]/);
+    expect(c.length).toBeLessThanOrEqual(80);
+  });
+});
+
 describe("board extractors: lever", () => {
   it("pulls title and JD from Lever markup", () => {
     const d = doc(`

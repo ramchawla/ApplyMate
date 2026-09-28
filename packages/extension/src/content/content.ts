@@ -102,7 +102,7 @@ export async function runOneClick(ctx: OneClickContext): Promise<RunReport> {
         .filter((f) => f.extractedValueType !== "cover-letter")
         .map((f) => ({
           fieldId: f.id,
-          label: f.label,
+          label: (f.description ? `${f.label} — ${f.description}` : f.label).slice(0, 500),
           type: f.type,
           options: f.options,
           required: f.required,
@@ -411,5 +411,11 @@ async function main(): Promise<void> {
 }
 
 if (inExtension && typeof document !== "undefined" && document.body) {
-  void main();
+  main().catch((err: unknown) => {
+    // Content-script errors never reach the page console reliably; leave a
+    // trace a developer (or an automated check) can read from the page.
+    const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.error("[ApplyMate] init failed:", err);
+    document.documentElement.setAttribute("data-applymate-error", message.slice(0, 300));
+  });
 }

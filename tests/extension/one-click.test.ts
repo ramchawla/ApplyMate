@@ -15,7 +15,7 @@ const GREENHOUSE_LIKE = `
     <label for="email">Email *</label><input id="email" type="email" required>
     <label for="phone">Phone</label><input id="phone" type="tel">
     <label for="resume">Resume/CV *</label><input id="resume" type="file" required>
-    <label for="q1">Why do you want to work at Acme? *</label><textarea id="q1" required></textarea>
+    <label for="q1">Why do you want to work at Acme? *</label><textarea id="q1" required aria-describedby="q1-d"></textarea><p id="q1-d">Tell us in 200-400 words.</p>
     <label for="q2">Are you legally authorized to work in Canada?</label>
     <select id="q2"><option value="">Select...</option><option>Yes</option><option>No</option></select>
     <button type="submit">Submit application</button>
@@ -136,6 +136,9 @@ describe("runOneClick", () => {
     const start = sent.find((m) => m.type === "TAILOR_START");
     expect(start.request.fields.map((f: any) => f.fieldId)).toEqual(["phone", "q1", "q2"]);
     expect(start.request.keywords).toEqual(["go"]);
+    expect(start.request.fields.find((f: any) => f.fieldId === "q1").label).toBe(
+      "Why do you want to work at Acme? — Tell us in 200-400 words.",
+    );
     expect(report.result?.fileName).toBe("Jane_Dev_Acme.pdf");
     expect(report.needsYou).toEqual([]);
     expect(statuses[0]).toMatch(/filled/);

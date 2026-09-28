@@ -22,7 +22,18 @@ const BOARD_EXTRACTORS: Record<string, (doc: Document) => ExtractedContent> = {
   smartrecruiters,
 };
 
+// Heuristic company matches sometimes land inside inline JSON/scripts.
+function saneCompany(c: string): string {
+  const t = c.trim();
+  return t.length > 80 || /["{}<>]/.test(t) ? "" : t;
+}
+
 export function extractJD(html: string, board: string): ExtractedContent {
+  const out = extractJDRaw(html, board);
+  return { ...out, company: saneCompany(out.company) };
+}
+
+function extractJDRaw(html: string, board: string): ExtractedContent {
   const boardExtract = BOARD_EXTRACTORS[board];
   if (boardExtract) {
     const doc = new DOMParser().parseFromString(html, "text/html");

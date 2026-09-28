@@ -16,6 +16,8 @@ export interface FormField {
     | "url"
     | "unknown";
   placeholder?: string;
+  // Helper text linked via aria-describedby ("great answers are 200-400 words").
+  description?: string;
   required: boolean;
   extractedValueType?: string | null;
   options?: string[];
