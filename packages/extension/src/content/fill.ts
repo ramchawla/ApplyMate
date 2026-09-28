@@ -334,7 +334,22 @@ async function fillPrompt(input: HTMLInputElement, value: string): Promise<boole
     keyTap(input, "Escape");
     return false;
   }
+  const seen = new Set(scopedOptions(input));
   press(pick);
+  // A category ("Job Board") opens a sub-list instead of selecting: match
+  // once more among the options that just appeared.
+  let fresh: HTMLElement[] = [];
+  for (let t = 0; t < 8 && !fresh.length && !promptHasSelection(input); t++) {
+    await sleep(50);
+    fresh = scopedOptions(input).filter((o) => !seen.has(o));
+  }
+  if (!fresh.length) return true;
+  const i = matchOption(fresh.map((o) => cleanText(o.textContent ?? "")), value);
+  if (i === -1) {
+    keyTap(input, "Escape");
+    return false;
+  }
+  press(fresh[i]);
   return true;
 }
 

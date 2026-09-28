@@ -45,6 +45,37 @@ describe("dropdown buttons (Workday)", () => {
 });
 
 describe("search prompts (Workday)", () => {
+  it("opens a matching category and picks from its sub-list", async () => {
+    const d = page(`<div data-automation-id="formField-src"><label for="src">How Did You Hear About Us?*</label>
+      <div data-automation-id="multiSelectContainer"><ul id="picked"></ul>
+      <div data-automation-id="multiselectInputContainer"><input id="src" data-automation-id="searchBox"></div></div></div>
+      <div id="menu"></div>`);
+    const menu = d.getElementById("menu")!;
+    const show = (items: string[], onPick: (t: string) => void) => {
+      menu.innerHTML = "";
+      for (const t of items) {
+        const o = d.createElement("div");
+        o.setAttribute("data-automation-id", "promptOption");
+        o.textContent = t;
+        o.addEventListener("click", () => onPick(t));
+        menu.appendChild(o);
+      }
+    };
+    const choose = (t: string) => {
+      menu.innerHTML = "";
+      d.getElementById("picked")!.innerHTML = `<li data-automation-id="selectedItem">${t}</li>`;
+    };
+    d.getElementById("src")!.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key !== "Enter") return;
+      // "Job Board" is a category: pressing it swaps in its leaves.
+      show(["Job Board", "Referral"], (t) => (t === "Job Board" ? setTimeout(() => show(["Indeed", "Other Job Board"], choose), 50) : choose(t)));
+    });
+    const [f] = extractLiveFields(d);
+    const res = await applyFill([{ fieldId: f.id, value: "Job Board" }], d);
+    expect(d.getElementById("picked")!.textContent).toBe("Other Job Board");
+    expect(res.filled).toEqual([f.id]);
+  });
+
   it("types, presses Enter and picks the matching prompt option", async () => {
     const d = page(`<label for="src">How Did You Hear About Us?*</label>
       <div data-automation-id="multiselectInputContainer"><input id="src" data-automation-id="searchBox"></div>
