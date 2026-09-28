@@ -16,7 +16,8 @@ export function saveBridgeToken(token: string): Promise<void> {
 // user never copies it by hand.
 export async function pair(): Promise<string> {
   try {
-    const res = await fetch(`${BRIDGE_BASE}/pair`);
+    // POST: Chrome always sends Origin on non-GET requests, which pairing checks.
+    const res = await fetch(`${BRIDGE_BASE}/pair`, { method: "POST" });
     if (!res.ok) return "";
     const { token } = (await res.json()) as { token?: string };
     if (token) await saveBridgeToken(token);

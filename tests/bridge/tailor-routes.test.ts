@@ -29,6 +29,7 @@ const body: TailorRequest = {
 function raw(
   path: string,
   headers: Record<string, string>,
+  method = "POST",
 ): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const req = request(
@@ -36,7 +37,7 @@ function raw(
         host: "127.0.0.1",
         port,
         path,
-        method: "GET",
+        method,
         headers: { host: "127.0.0.1", ...headers },
       },
       (res) => {

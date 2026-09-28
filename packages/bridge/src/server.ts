@@ -152,7 +152,7 @@ export function createServer(
     // Pairing hands the token to the extension so the user never pastes it.
     // Only chrome-extension:// origins (web pages can't forge Origin), and
     // only the first one to ask — later origins are refused.
-    if (req.method === "GET" && url === "/pair") {
+    if (req.method === "POST" && url === "/pair") {
       const origin = req.headers.origin ?? "";
       if (!options.token || !options.pairFile || !origin.startsWith("chrome-extension://")) {
         return send(403, { error: "pairing unavailable" });

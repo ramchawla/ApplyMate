@@ -18,9 +18,13 @@ beforeEach(() => {
 });
 
 function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
-  const calls: { url: string; auth?: string }[] = [];
+  const calls: { url: string; auth?: string; method?: string }[] = [];
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
-    calls.push({ url, auth: (init?.headers as Record<string, string> | undefined)?.authorization });
+    calls.push({
+      url,
+      method: init?.method,
+      auth: (init?.headers as Record<string, string> | undefined)?.authorization,
+    });
     return handler(url, init);
   });
   return calls;
@@ -35,6 +39,7 @@ describe("bridgeFetch", () => {
     const res = await bridgeFetch("/profile");
     expect(res.ok).toBe(true);
     expect(calls.map((c) => c.url.replace("http://127.0.0.1:4179", ""))).toEqual(["/pair", "/profile"]);
+    expect(calls[0].method).toBe("POST"); // POST guarantees Chrome sends Origin
     expect(calls[1].auth).toBe("Bearer T1");
     expect(stored.bridgeToken).toBe("T1");
   });
