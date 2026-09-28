@@ -151,6 +151,58 @@ describe("combobox fill without timers", () => {
   });
 });
 
+describe("autocomplete text fields", () => {
+  it("types the city and picks the suggestion (Lever location)", async () => {
+    const d = doc(`<li class="application-question"><label><div class="application-label">Current location ✱</div>
+      <div class="application-field"><input class="location-input" id="location-input" name="location" required>
+      <input id="selected-location" type="hidden" name="selectedLocation">
+      <div class="dropdown-container"><div class="dropdown-results"></div></div></div></label></li>`);
+    const input = d.getElementById("location-input") as HTMLInputElement;
+    // Real Lever searches on keydown (jQuery), reading the value afterwards.
+    input.addEventListener("keydown", () => queueMicrotask(() => {
+      if (!input.value) return;
+      const results = d.querySelector(".dropdown-results")!;
+      results.innerHTML = "";
+      for (const [i, name] of ["Toronto, ON, CAN", "Toronto, OH, USA"].entries()) {
+        const el = d.createElement("div");
+        el.className = "dropdown-location";
+        el.id = `location-${i}`;
+        el.textContent = name;
+        el.addEventListener("click", () => {
+          (d.getElementById("selected-location") as HTMLInputElement).value = name;
+          input.value = name;
+        });
+        results.appendChild(el);
+      }
+    }));
+    const [f] = extractLiveFields(d);
+    const res = await applyFill([{ fieldId: f.id, value: "Toronto, ON" }], d);
+    expect(res.filled).toEqual([f.id]);
+    expect((d.getElementById("selected-location") as HTMLInputElement).value).toBe("Toronto, ON, CAN");
+  });
+
+  it("keeps the typed value when no suggestions appear", async () => {
+    const d = doc(`<div class="field"><label for="city">City</label><input id="city"><div class="autocomplete-list"></div></div>`);
+    extractLiveFields(d);
+    const res = await applyFill([{ fieldId: "city", value: "Toronto" }], d);
+    expect(res.filled).toEqual(["city"]);
+    expect((d.getElementById("city") as HTMLInputElement).value).toBe("Toronto");
+  });
+});
+
+describe("button-group questions", () => {
+  it("presses the matching yes/no button", async () => {
+    const d = doc(`<div data-field-path="s"><label for="s">Will you require sponsorship?</label>
+      <div><button aria-pressed="false">Yes</button><button aria-pressed="false">No</button></div></div>`);
+    d.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => b.setAttribute("aria-pressed", "true")));
+    const [f] = extractLiveFields(d);
+    const res = await applyFill([{ fieldId: f.id, value: "No" }], d);
+    expect(res.filled).toEqual([f.id]);
+    expect(d.querySelectorAll("button")[1].getAttribute("aria-pressed")).toBe("true");
+    expect(d.querySelectorAll("button")[0].getAttribute("aria-pressed")).toBe("false");
+  });
+});
+
 describe("combobox open sequence", () => {
   it("opens widgets that only react to mouseup (Greenhouse's react-select wrapper)", async () => {
     const d = doc(`<label for="g">Gender</label><div class="wrap"><input id="g" role="combobox"></div><div id="menu"></div><input type="hidden" id="val">`);

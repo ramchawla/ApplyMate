@@ -138,9 +138,11 @@ export async function runOneClick(ctx: OneClickContext): Promise<RunReport> {
 
   if (result) {
     report.result = result;
-    const resumeField = fields.find(
-      (f) => f.type === "file" && f.extractedValueType === "resume",
-    );
+    // Prefer the labelled Resume field over unlabelled "autofill from
+    // resume" drop zones (Ashby), which re-parse and overwrite the form.
+    const resumeFields = fields.filter((f) => f.type === "file" && f.extractedValueType === "resume");
+    const resumeField =
+      resumeFields.find((f) => /resume|cv|curriculum/i.test(f.label)) ?? resumeFields[0];
     const resumeInput = resumeField
       ? (findField(doc, resumeField.id) as HTMLInputElement | null)
       : null;

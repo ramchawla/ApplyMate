@@ -121,6 +121,47 @@ describe("extractLiveFields", () => {
     });
   });
 
+  it("extracts Ashby yes/no button questions as one choice field", () => {
+    const d = doc(`
+      <div data-field-path="auth"><label for="auth">Are you authorized to work in the country where the job is located?</label>
+        <div><button aria-pressed="false" data-option="yes">Yes</button><button aria-pressed="false" data-option="no">No</button>
+        <input type="checkbox" tabindex="-1" name="auth"></div></div>`);
+    const fields = extractLiveFields(d);
+    expect(fields).toHaveLength(1);
+    expect(fields[0]).toMatchObject({
+      type: "radio",
+      label: "Are you authorized to work in the country where the job is located?",
+      options: ["Yes", "No"],
+      extractedValueType: "work-auth",
+    });
+  });
+
+  it("labels Ashby radio groups from the fieldset's question label", () => {
+    const d = doc(`<h1 class="application-label">Application</h1>
+      <div data-field-path="g"><fieldset><label for="g">Gender</label>
+        <div><input type="radio" id="g-0" name="gg"><label for="g-0">Male</label></div>
+        <div><input type="radio" id="g-1" name="gg"><label for="g-1">Decline to self-identify</label></div>
+      </fieldset></div>`);
+    expect(extractLiveFields(d)[0]).toMatchObject({ label: "Gender", options: ["Male", "Decline to self-identify"] });
+  });
+
+  it("uses a dangling label[for] in the same field block (Ashby location)", () => {
+    const d = doc(`
+      <div data-field-path="name"><label for="name">Legal Name</label><p>Please enter your legal name exactly as on your ID.</p><input id="name"></div>
+      <div data-field-path="loc"><label for="loc">Where are you currently located?</label><div><input role="combobox" placeholder="Start typing..."></div></div>`);
+    expect(extractLiveFields(d)[1]).toMatchObject({ label: "Where are you currently located?", extractedValueType: "location" });
+  });
+
+  it("cuts Lever's ✱ marker and trailing helper text out of labels", () => {
+    const d = doc(`<li class="application-question"><div class="application-label">Current location ✱No location found. Try entering a different location</div>
+      <div class="application-field"><input name="location"></div></li>
+      <li class="application-question"><div class="application-label">Please tell us how you heard about this opportunity ✱</div>
+      <div class="application-field"><select name="src"><option>LinkedIn</option></select></div></li>`);
+    const [loc, src] = extractLiveFields(d);
+    expect(loc).toMatchObject({ label: "Current location", required: true, extractedValueType: "location" });
+    expect(src).toMatchObject({ extractedValueType: "how-heard", required: true });
+  });
+
   it("marks ARIA comboboxes", () => {
     const d = doc(`<label for="loc">Location (City)</label><input id="loc" role="combobox">`);
     expect(extractLiveFields(d)[0]).toMatchObject({

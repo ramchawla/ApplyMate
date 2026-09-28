@@ -49,4 +49,33 @@ export function press(el: Element): void {
   fireEvents(el, ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]);
 }
 
+// Type like a keyboard: per character keydown → value → input → keyup.
+// Autocompletes differ in which event starts a search (Lever: keydown).
+export function typeInto(el: HTMLInputElement | HTMLTextAreaElement, text: string): void {
+  setNativeValue(el, "");
+  let acc = "";
+  for (const ch of text) {
+    const init = { key: ch, bubbles: true, cancelable: true };
+    el.dispatchEvent(new KeyboardEvent("keydown", init));
+    acc += ch;
+    setNativeValue(el, acc);
+    el.dispatchEvent(
+      typeof InputEvent === "function"
+        ? new InputEvent("input", { data: ch, inputType: "insertText", bubbles: true })
+        : new Event("input", { bubbles: true }),
+    );
+    el.dispatchEvent(new KeyboardEvent("keyup", init));
+  }
+}
+
+// Yes/No-style questions built from toggle buttons (Ashby): a container whose
+// direct children include 2-6 buttons carrying aria-pressed or data-option.
+export function toggleButtons(el: Element): HTMLButtonElement[] {
+  const buttons = Array.from(el.children).filter(
+    (c): c is HTMLButtonElement =>
+      c instanceof HTMLButtonElement && (c.hasAttribute("aria-pressed") || c.hasAttribute("data-option")),
+  );
+  return buttons.length >= 2 && buttons.length <= 6 ? buttons : [];
+}
+
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

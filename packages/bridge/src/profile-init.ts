@@ -59,7 +59,7 @@ export function buildProfile(
       disability: DECLINE,
     },
     answers: [
-      { match: "how did you (hear|find|learn)", answer: "LinkedIn" },
+      { match: "how (did )?you (hear|heard|find|found|learn)", answer: "LinkedIn" },
       { match: "previously (worked|been employed)", answer: "No" },
     ],
   };

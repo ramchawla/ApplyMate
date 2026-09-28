@@ -181,5 +181,28 @@ describe("runOneClick", () => {
     expect(report.filled).toBe(0);
     expect(report.error).toMatch(/Could not establish connection/);
   });
-});
 
+  it("attaches to the labelled Resume field, not an unlabelled autofill drop zone", async () => {
+    const d = page(`
+      <div><input type="file" id="dropzone"></div>
+      <form><label for="first_name">First Name</label><input id="first_name">
+      <label for="email">Email</label><input id="email" type="email">
+      <label for="res">Resume</label><input type="file" id="res"></form>`);
+    const got: Record<string, File[]> = { dropzone: [], res: [] };
+    for (const id of ["dropzone", "res"]) {
+      Object.defineProperty(d.getElementById(id), "files", { set: (v) => got[id].push(...v), get: () => got[id], configurable: true });
+    }
+    vi.stubGlobal("DataTransfer", class { list: File[] = []; items = { add: (f: File) => this.list.push(f) }; get files() { return this.list; } });
+    await runOneClick({
+      doc: d, fields: extractLiveFields(d), keywords: [], pollMs: 1, settleMs: 1,
+      jd: { url: "u", title: "", company: "", description: "" }, jdSource: "none",
+      send: async (msg: any) => msg.type === "GET_PROFILE" ? normalizeProfile({}) : msg.type === "TAILOR_START" ? { jobId: "J" }
+        : msg.type === "TAILOR_POLL" ? { status: "done", result: { applicationId: "a", fileName: "R.pdf", coverLetter: "", hasCoverLetterPdf: false, answers: [], keywords: { injected: [], skipped: [] }, edits: [], warnings: [], pages: 1, savedTo: "/x" } }
+        : msg.type === "FETCH_PDF" ? { base64: btoa("%PDF") } : { ok: true },
+      onStatus: () => {},
+    });
+    expect(got.res.map((f) => f.name)).toEqual(["R.pdf"]);
+    expect(got.dropzone).toEqual([]);
+    vi.unstubAllGlobals();
+  });
+});

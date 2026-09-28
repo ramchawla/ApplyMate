@@ -1,5 +1,14 @@
 import type { FormField } from "../types";
-import { FIELD_ATTR, cssEscape, fireEvents, press, setNativeChecked, setNativeValue } from "./dom";
+import {
+  FIELD_ATTR,
+  cssEscape,
+  fireEvents,
+  press,
+  setNativeChecked,
+  setNativeValue,
+  toggleButtons,
+  typeInto,
+} from "./dom";
 
 export interface FillInstruction {
   fieldId: string;
@@ -131,6 +140,9 @@ function fillCheckbox(el: HTMLInputElement, value: string): boolean {
 }
 
 const OPTION_SELECTOR = "[role=option], [id*='-option-'], .select__option";
+// Suggestion items of plain-text autocompletes (Lever location, Google Places).
+const SUGGESTION_SELECTOR = `${OPTION_SELECTOR}, .dropdown-location, [class*='dropdown-results'] > *, .pac-item`;
+const SUGGEST_CONTAINER = "[role=listbox], [class*='dropdown'], [class*='autocomplete'], [class*='suggest']";
 
 // Options that belong to this combobox — never another widget's open menu
 // (e.g. the phone-country picker left open beside a react-select).
@@ -204,8 +216,7 @@ async function fillCombobox(input: HTMLInputElement, value: string): Promise<boo
   key("ArrowDown");
   let pick = await waitForMatch(input, value, 1200);
   if (!pick) {
-    setNativeValue(input, value.split(",")[0].trim());
-    fireEvents(input, ["input"]);
+    typeInto(input, value.split(",")[0].trim());
     pick = await waitForMatch(input, value, 2500);
   }
   if (!pick) {
@@ -218,7 +229,48 @@ async function fillCombobox(input: HTMLInputElement, value: string): Promise<boo
   return true;
 }
 
+function waitForSuggestion(box: Element, value: string, ms: number): Promise<HTMLElement | null> {
+  const find = () => {
+    const items = Array.from(box.querySelectorAll<HTMLElement>(SUGGESTION_SELECTOR));
+    const i = matchOption(items.map(textOf), value);
+    return i === -1 ? null : items[i];
+  };
+  const now = find();
+  if (now) return Promise.resolve(now);
+  return new Promise((resolve) => {
+    const done = (pick: HTMLElement | null) => {
+      observer.disconnect();
+      clearTimeout(timer);
+      resolve(pick);
+    };
+    const observer = new MutationObserver(() => {
+      const pick = find();
+      if (pick) done(pick);
+    });
+    const timer = setTimeout(() => done(null), ms);
+    observer.observe(box, { childList: true, subtree: true, characterData: true });
+  });
+}
+
+// Text inputs that clear themselves unless a suggestion is chosen (Lever's
+// location sets a hidden selectedLocation only on pick). Type the head of
+// the value, pick the best suggestion; fall back to the typed full value.
+async function fillAutocompleteText(input: HTMLInputElement, box: Element, value: string): Promise<boolean> {
+  input.focus();
+  typeInto(input, value.split(",")[0].trim());
+  const pick = await waitForSuggestion(box, value, 2000);
+  if (pick) {
+    press(pick);
+    return true;
+  }
+  setNativeValue(input, value);
+  fireEvents(input, ["input", "change", "blur"]);
+  return true;
+}
+
 async function fillElement(el: HTMLElement, value: string): Promise<boolean> {
+  const toggles = toggleButtons(el);
+  if (toggles.length) return clickMatching(toggles, value);
   if (el.getAttribute("role") === "radiogroup") {
     return clickMatching(Array.from(el.querySelectorAll<HTMLElement>("[role=radio]")), value);
   }
@@ -228,6 +280,12 @@ async function fillElement(el: HTMLElement, value: string): Promise<boolean> {
     if (el.type === "radio") return fillRadio(el, value);
     if (el.type === "checkbox") return fillCheckbox(el, value);
     if (el.getAttribute("role") === "combobox") return fillCombobox(el, value);
+  }
+  if (el instanceof HTMLInputElement && el.type === "text") {
+    const box = el.closest("li, [data-field-path], .field, [class*='field']") ?? el.parentElement;
+    if (box && (el.getAttribute("aria-autocomplete") || box.querySelector(SUGGEST_CONTAINER))) {
+      return fillAutocompleteText(el, box, value);
+    }
   }
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
     el.focus();
@@ -265,6 +323,8 @@ export function attachFile(input: HTMLInputElement, file: File): boolean {
 }
 
 function isEmpty(el: HTMLElement): boolean {
+  const toggles = toggleButtons(el);
+  if (toggles.length) return !toggles.some((b) => b.getAttribute("aria-pressed") === "true");
   if (el.getAttribute("role") === "radiogroup") return !el.querySelector("[aria-checked=true]");
   if (el instanceof HTMLInputElement) {
     if (el.type === "radio" || el.type === "checkbox") return !group(el).some((r) => r.checked);

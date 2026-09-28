@@ -5,7 +5,15 @@ import {
   LONG_LABEL_TYPES,
   SHORT_LABEL_MAX,
 } from "../../../../../lib/shared/constants";
-import { FIELD_ATTR, cleanText, cssEscape } from "../dom";
+import { FIELD_ATTR, cleanText, cssEscape, toggleButtons } from "../dom";
+
+// Required markers (* or Lever's ✱) end the question; ATSs append helper
+// text after them ("Current location ✱No location found…").
+function labelText(raw: string): string {
+  const head = raw.split(/[✱*]/)[0];
+  return cleanText(head.trim() ? head : raw);
+}
+const REQUIRED_MARK = /[✱*]/;
 
 const SKIP_TYPES = new Set(["hidden", "submit", "button", "reset", "image", "search"]);
 const QUESTION_SELECTOR =
@@ -92,7 +100,9 @@ function rawLabel(el: HTMLElement, doc: Document): string {
   if (legend?.textContent?.trim()) return legend.textContent;
   const q = questionText(el, (c) => {
     const f = c.getAttribute("for");
-    return c.tagName === "LABEL" && !!f && f !== el.id;
+    // A label bound to a different, existing control isn't ours. A dangling
+    // for= (Ashby omits the input id) still labels this field.
+    return c.tagName === "LABEL" && !!f && f !== el.id && !!doc.getElementById(f);
   });
   return q || el.getAttribute("placeholder") || el.getAttribute("name") || "";
 }
@@ -102,12 +112,14 @@ function groupRawLabel(first: HTMLElement, doc: Document): string {
   if (legend?.textContent?.trim()) return legend.textContent;
   const byIds = labelledBy(first.closest("[aria-labelledby]") ?? first, doc);
   if (byIds) return byIds;
-  return questionText(
-    first,
-    (c) =>
-      !!c.querySelector("input[type=radio], input[type=checkbox]") ||
-      (c.tagName === "LABEL" && !!c.getAttribute("for")),
-  );
+  // Skip option labels (wrapping or pointing at a radio/checkbox); keep the
+  // question label even when it has a for= (Ashby: fieldset > label[for]).
+  return questionText(first, (c) => {
+    if (c.querySelector("input[type=radio], input[type=checkbox]")) return true;
+    const f = c.getAttribute("for");
+    const target = f ? doc.getElementById(f) : null;
+    return c.tagName === "LABEL" && target instanceof HTMLInputElement && /radio|checkbox/.test(target.type);
+  });
 }
 
 function optionLabel(input: HTMLInputElement, doc: Document): string {
@@ -155,6 +167,8 @@ export function extractLiveFields(
     // Validation mirrors (Greenhouse's requiredInput beside each dropdown).
     if (el.getAttribute("aria-hidden") === "true") continue;
     if (isTrapOrPlumbing(el, htmlType)) continue;
+    // Companion checkbox mirroring a toggle-button question (Ashby yes/no).
+    if (htmlType === "checkbox" && el.parentElement && toggleButtons(el.parentElement).length) continue;
 
     const input = el as HTMLInputElement;
     const groupInputs =
@@ -193,7 +207,7 @@ export function extractLiveFields(
               : "text";
 
     const raw = isGroup ? groupRawLabel(el, doc) : rawLabel(el, doc);
-    const label = cleanText(raw);
+    const label = labelText(raw);
     const options =
       tag === "select"
         ? Array.from((el as HTMLSelectElement).options)
@@ -220,7 +234,7 @@ export function extractLiveFields(
         el.hasAttribute("required") ||
         el.getAttribute("aria-required") === "true" ||
         groupInputs.some((r) => r.required) ||
-        /\*\s*$/.test(raw.trim()),
+        REQUIRED_MARK.test(raw),
       options,
       extractedValueType: valueType,
       matchConfidence: confidence,
@@ -245,6 +259,31 @@ export function extractLiveFields(
       type: "radio",
       required: group.getAttribute("aria-required") === "true" || /\*\s*$/.test(raw.trim()),
       options: radios.map((r) => cleanText(r.getAttribute("aria-label") ?? r.textContent ?? "")),
+      extractedValueType: valueType,
+      matchConfidence: confidence,
+      validated: false,
+    });
+  }
+
+  // Toggle-button questions (Ashby "Yes" / "No").
+  const seenGroupsEl = new Set<Element>();
+  for (const btn of Array.from(doc.querySelectorAll<HTMLElement>("button[aria-pressed], button[data-option]"))) {
+    const group = btn.parentElement;
+    if (!group || seenGroupsEl.has(group)) continue;
+    seenGroupsEl.add(group);
+    const buttons = toggleButtons(group);
+    if (!buttons.length) continue;
+    const id = uniqueId(group.getAttribute(FIELD_ATTR) ?? nextAnon(), used);
+    if (stamp) group.setAttribute(FIELD_ATTR, id);
+    const raw = labelledBy(group, doc) || questionText(group, () => false);
+    const label = labelText(raw);
+    const { valueType, confidence } = inferValueType(label, "radio", "", "radio");
+    fields.push({
+      id,
+      label,
+      type: "radio",
+      required: REQUIRED_MARK.test(raw),
+      options: buttons.map((b) => cleanText(b.textContent ?? "")),
       extractedValueType: valueType,
       matchConfidence: confidence,
       validated: false,
