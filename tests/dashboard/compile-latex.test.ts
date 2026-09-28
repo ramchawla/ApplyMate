@@ -1,9 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   compileLatex,
+  compileLatexWithPages,
+  parsePageCount,
   TectonicMissingError,
+  toTectonicCompat,
 } from "../../lib/local/compile-latex";
+
+const FIXTURE = fileURLToPath(
+  new URL("../skill/fixtures/resume-master.tex", import.meta.url),
+);
 
 function hasTectonic(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -30,4 +39,45 @@ describe("compileLatex", () => {
     expect(pdf[1]).toBe(0x50);
     expect(pdf.length).toBeGreaterThan(400);
   }, 120000);
+});
+
+describe("toTectonicCompat", () => {
+  it("strips pdfTeX-only glyphtounicode lines", () => {
+    const out = toTectonicCompat(
+      "\\input{glyphtounicode}\n\\pdfgentounicode=1\n\\begin{document}",
+    );
+    expect(out).not.toContain("glyphtounicode");
+    expect(out).not.toContain("pdfgentounicode");
+    expect(out).toContain("\\begin{document}");
+  });
+
+  it("swaps fontawesome5 for a fontspec shim that defines the icons", () => {
+    const out = toTectonicCompat("\\usepackage{fontawesome5}\n");
+    expect(out).not.toContain("{fontawesome5}");
+    expect(out).toContain("\\usepackage{fontspec}");
+    expect(out).toContain("\\providecommand{\\faGithub}");
+    expect(out).toContain("\\providecommand{\\faEnvelope}");
+  });
+
+  it("leaves other documents unchanged", () => {
+    const tex = "\\documentclass{article}\\begin{document}x\\end{document}";
+    expect(toTectonicCompat(tex)).toBe(tex);
+  });
+});
+
+describe("parsePageCount", () => {
+  it("reads the page count from the XeTeX log", () => {
+    expect(parsePageCount("Output written on resume.xdv (2 pages, 1234 bytes).")).toBe(2);
+    expect(parsePageCount("Output written on resume.xdv (1 page, 99 bytes).")).toBe(1);
+    expect(parsePageCount("")).toBe(0);
+  });
+});
+
+describe("compileLatexWithPages", () => {
+  it("compiles a pdfLaTeX-style resume (fontawesome5 + glyphtounicode) to one page", async () => {
+    if (!(await hasTectonic())) return;
+    const { pdf, pages } = await compileLatexWithPages(readFileSync(FIXTURE, "utf8"));
+    expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
+    expect(pages).toBe(1);
+  }, 180000);
 });
