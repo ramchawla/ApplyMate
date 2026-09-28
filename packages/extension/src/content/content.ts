@@ -363,6 +363,18 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
   return report;
 }
 
+// Pressing ⚡ again (a paused wizard, or a re-run) reuses the last tailoring
+// job only for the same job, keywords and JD, and never one that failed.
+export const tailorKey = (jd: PageJD, keywords: string[]) =>
+  JSON.stringify([jd.url, keywords, jd.description]);
+
+export function reusableTailorJob(
+  last: { jobId?: string; key?: string; failed?: boolean },
+  key: string,
+): string | undefined {
+  return last.jobId && !last.failed && last.key === key ? last.jobId : undefined;
+}
+
 // Re-scan only when form controls appear — cheap on pages that churn DOM
 // constantly (LinkedIn feed) but never add inputs.
 const REEXTRACT_DEBOUNCE_MS = 400;
@@ -439,7 +451,7 @@ async function main(): Promise<void> {
   let posting = false;
   let ignoreRecent = false;
   let ranFill = false;
-  const last: { jobId?: string; jobUrl?: string; result?: TailorResult } = {};
+  const last: { jobId?: string; key?: string; failed?: boolean; result?: TailorResult } = {};
   // Edits the user makes between runs count too: resuming a paused wizard
   // must not overwrite them.
   const touched = new Set<string>();
@@ -517,12 +529,11 @@ async function main(): Promise<void> {
         jdSource: source,
         keywords: ui.keywords,
         touched,
-        // Same job as a paused run: reuse its tailoring instead of re-running Claude.
-        tailorJobId: last.jobUrl === jd.url ? last.jobId : undefined,
+        tailorJobId: reusableTailorJob(last, tailorKey(jd, ui.keywords)),
         send: async (msg: unknown) => {
           const res = await send(msg);
           if ((msg as { type?: string })?.type === "TAILOR_START" && res?.jobId) {
-            Object.assign(last, { jobId: res.jobId, jobUrl: jd.url });
+            Object.assign(last, { jobId: res.jobId, key: tailorKey(jd, ui.keywords), failed: false });
           }
           return res;
         },
@@ -538,6 +549,10 @@ async function main(): Promise<void> {
         return;
       }
       last.result = report.result;
+      // A failed or vanished job (bridge restart) is never reused.
+      if (!report.result && /^(Tailoring resume failed|Bridge offline)/.test(report.error ?? "")) {
+        last.failed = true;
+      }
       Object.assign(ui, {
         busy: false,
         canOpenPdf: !!report.result,

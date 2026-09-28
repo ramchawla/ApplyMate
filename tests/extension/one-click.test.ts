@@ -4,6 +4,8 @@ import {
   isSubmitControl,
   isPostingPage,
   runOneClick,
+  reusableTailorJob,
+  tailorKey,
 } from "../../packages/extension/src/content/content";
 import { extractLiveFields } from "../../packages/extension/src/content/extractors/form";
 import { normalizeProfile } from "../../packages/extension/src/utils/profile";
@@ -253,3 +255,14 @@ describe("runOneClick", () => {
   });
 });
 
+describe("reusing a tailoring job on the next press", () => {
+  const jd = { url: "https://acme/jobs/1", title: "SRE", company: "Acme", description: "JD" };
+  const key = tailorKey(jd, ["go"]);
+  it("reuses only for the same job, keywords and JD, and never a failed job", () => {
+    expect(reusableTailorJob({ jobId: "T", key }, key)).toBe("T");
+    expect(reusableTailorJob({ jobId: "T", key }, tailorKey(jd, ["go", "rust"]))).toBeUndefined();
+    expect(reusableTailorJob({ jobId: "T", key }, tailorKey({ ...jd, description: "Pasted JD" }, ["go"]))).toBeUndefined();
+    expect(reusableTailorJob({ jobId: "T", key, failed: true }, key)).toBeUndefined();
+    expect(reusableTailorJob({}, key)).toBeUndefined();
+  });
+});
