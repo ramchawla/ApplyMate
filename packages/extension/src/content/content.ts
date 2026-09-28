@@ -3,7 +3,8 @@ import { extractJD } from "./extractors/index";
 import { extractLiveFields } from "./extractors/form";
 import { applyFill, attachFile, findField, highlightEmptyRequired } from "./fill";
 import { mountWidget, type WidgetState } from "./widget";
-import { FIELD_ATTR, sleep } from "./dom";
+import { FIELD_ATTR, press, sleep } from "./dom";
+import { activeScope, findStepButton, stepSignature, visibleErrors, waitForStepChange } from "./wizard";
 import { buildInstantPlan } from "../lib/field-mapping";
 import { normalizeProfile } from "../utils/profile";
 import { pickJD, rememberJD, type CachedJD, type PageJD } from "../lib/jd-cache";
@@ -41,6 +42,7 @@ type Send = (msg: unknown) => Promise<any>;
 
 export interface OneClickContext {
   doc: Document;
+  // Step 1's fields (already scanned); later steps are rescanned.
   fields: FormField[];
   jd: PageJD;
   jdSource: string;
@@ -49,12 +51,18 @@ export interface OneClickContext {
   onStatus: (lines: Line[]) => void;
   pollMs?: number;
   settleMs?: number;
+  stepTimeoutMs?: number;
+  // Resuming after a pause: poll this finished/running job, don't start one.
+  tailorJobId?: string;
+  // Fields the user edited, kept across runs so a resume never overwrites them.
+  touched?: Set<string>;
   // Which events count as the user editing a field (tests inject a stub;
   // synthetic events from our own fills are never trusted).
   isUserEvent?: (e: Event) => boolean;
 }
 
 const POLL_LIMIT_MS = 240_000;
+const MAX_STEPS = 15;
 
 function base64ToFile(b64: string, name: string): File {
   const bin = atob(b64);
@@ -63,11 +71,11 @@ function base64ToFile(b64: string, name: string): File {
   return new File([bytes], name, { type: "application/pdf" });
 }
 
-export async function runOneClick(ctx: OneClickContext): Promise<RunReport> {
-  const { doc } = ctx;
-  // Anything the user edits during the run is theirs: never overwritten.
-  const isUserEvent = ctx.isUserEvent ?? ((e: Event) => e.isTrusted);
-  const touched = new Set<string>();
+export function trackUserEdits(
+  doc: Document,
+  touched: Set<string>,
+  isUserEvent: (e: Event) => boolean,
+): () => void {
   const onEdit = (e: Event) => {
     if (!isUserEvent(e) || !(e.target instanceof Element)) return;
     const id = e.target.closest(`[${FIELD_ATTR}]`)?.getAttribute(FIELD_ATTR);
@@ -75,16 +83,41 @@ export async function runOneClick(ctx: OneClickContext): Promise<RunReport> {
   };
   doc.addEventListener("input", onEdit, true);
   doc.addEventListener("change", onEdit, true);
-  try {
-    return await runPhases(ctx, touched);
-  } finally {
+  return () => {
     doc.removeEventListener("input", onEdit, true);
     doc.removeEventListener("change", onEdit, true);
+  };
+}
+
+export async function runOneClick(ctx: OneClickContext): Promise<RunReport> {
+  // Anything the user edits during the run is theirs: never overwritten.
+  const touched = ctx.touched ?? new Set<string>();
+  const stop = trackUserEdits(ctx.doc, touched, ctx.isUserEvent ?? ((e: Event) => e.isTrusted));
+  try {
+    return await runSteps(ctx, touched);
+  } finally {
+    stop();
   }
 }
 
-async function runPhases(ctx: OneClickContext, touched: Set<string>): Promise<RunReport> {
-  const { doc, fields, send } = ctx;
+const scopeRoot = (doc: Document) => {
+  const scope = activeScope(doc);
+  return scope instanceof Document ? scope : (scope as Element);
+};
+
+const toQuestion = (f: FormField) => ({
+  fieldId: f.id,
+  label: (f.description ? `${f.label} — ${f.description}` : f.label).slice(0, 500),
+  type: f.type,
+  options: f.options,
+  required: f.required,
+});
+
+// One press fills the page; on a wizard (Next/Continue on step 1) it fills
+// each step, presses Next, and stops at the page whose button is Submit —
+// never pressing it. Pauses on empty required fields or rejected steps.
+async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<RunReport> {
+  const { doc, send } = ctx;
   const lines: Line[] = [];
   const status = (line: Line, replaceTone?: Line["tone"]) => {
     if (replaceTone) {
@@ -94,127 +127,168 @@ async function runPhases(ctx: OneClickContext, touched: Set<string>): Promise<Ru
     lines.push(line);
     ctx.onStatus([...lines]);
   };
+  const untouched = (i: { fieldId: string }) => !touched.has(i.fieldId);
+  const job = {
+    title: ctx.jd.title,
+    company: ctx.jd.company,
+    url: ctx.jd.url,
+    description: ctx.jd.description,
+  };
 
-  // Phase 1 — instant fill from the profile.
   const profileRes = await send({ type: "GET_PROFILE" });
   const profile: Profile = normalizeProfile(profileRes?.error ? {} : profileRes);
-  const plan = buildInstantPlan(fields, profile);
-  const first = await applyFill(plan.instructions, doc);
-  status({ tone: "ok", text: `${first.filled.length} fields filled` });
-
   const report: RunReport = {
     url: ctx.jd.url,
     title: ctx.jd.title,
     company: ctx.jd.company,
     jdSource: ctx.jdSource,
-    filled: first.filled.length,
+    filled: 0,
     needsYou: [],
+    steps: 0,
+    stoppedAt: "done",
     at: Date.now(),
   };
 
-  // Phase 2 — tailor in the background.
-  const coverField = fields.find((f) => f.extractedValueType === "cover-letter");
-  const start = await send({
-    type: "TAILOR_START",
-    request: {
-      job: {
-        title: ctx.jd.title,
-        company: ctx.jd.company,
-        url: ctx.jd.url,
-        description: ctx.jd.description,
-      },
-      keywords: ctx.keywords,
-      fields: plan.pending
-        .filter((f) => f.extractedValueType !== "cover-letter")
-        .map((f) => ({
-          fieldId: f.id,
-          label: (f.description ? `${f.label} — ${f.description}` : f.label).slice(0, 500),
-          type: f.type,
-          options: f.options,
-          required: f.required,
-        })),
-      wantCoverLetterPdf: coverField?.type === "file",
-    },
-  });
-
-  let result: TailorResult | undefined;
-  if (!start?.jobId) {
-    report.error = `Bridge offline or failed (${start?.error ?? profileRes?.error ?? "no response"}) — start it with \`pnpm bridge\``;
-    status({ tone: "err", text: report.error });
-  } else {
+  // Polls a bridge job until it settles; resolves the done response or null.
+  const poll = async (type: string, jobId: string, what: string) => {
     const began = Date.now();
     for (;;) {
       await sleep(ctx.pollMs ?? 2000);
-      const s = await send({ type: "TAILOR_POLL", jobId: start.jobId });
-      if (s?.status === "done") {
-        result = s.result as TailorResult;
-        break;
-      }
+      const s = await send({ type, jobId });
+      if (s?.status === "done") return s;
       if (s?.status === "error" || s?.error || Date.now() - began > POLL_LIMIT_MS) {
-        report.error = `Tailoring failed: ${s?.error ?? "timed out"}`;
+        report.error = `${what} failed: ${s?.error ?? "timed out"}`;
         status({ tone: "err", text: report.error }, "wait");
-        break;
+        return null;
       }
-      status(
-        { tone: "wait", text: `Tailoring resume… ${Math.round((Date.now() - began) / 1000)}s` },
-        "wait",
-      );
+      status({ tone: "wait", text: `${what}… ${Math.round((Date.now() - began) / 1000)}s` }, "wait");
     }
-  }
+  };
 
-  if (result) {
-    report.result = result;
+  let tailorJobId = ctx.tailorJobId;
+  let result: TailorResult | undefined;
+  let tailorAwaited = false;
+  const awaitTailoring = async () => {
+    if (!tailorAwaited && tailorJobId) {
+      tailorAwaited = true;
+      result = (await poll("TAILOR_POLL", tailorJobId, "Tailoring resume"))?.result;
+      if (result) report.result = result;
+    }
+    return result;
+  };
+
+  let wizard = false;
+  for (let step = 1; step <= MAX_STEPS; step++) {
+    report.steps = step;
+    const fields = step === 1 ? ctx.fields : extractLiveFields(scopeRoot(doc));
+    const plan = buildInstantPlan(fields, profile);
+    const first = await applyFill(plan.instructions.filter(untouched), doc);
+    report.filled += first.filled.length;
+
+    const coverField = fields.find((f) => f.extractedValueType === "cover-letter");
+    const questions = plan.pending.filter((f) => f !== coverField);
+    if (step === 1) {
+      wizard = findStepButton(doc)?.kind === "advance";
+      status({ tone: "ok", text: `${wizard ? "Step 1 · " : ""}${first.filled.length} fields filled` });
+      if (!tailorJobId) {
+        // Single page: one call tailors and answers. Wizard: answers come
+        // per step from /answer so step 1 needn't wait for the resume.
+        const start = await send({
+          type: "TAILOR_START",
+          request: {
+            job,
+            keywords: ctx.keywords,
+            fields: wizard ? [] : questions.map(toQuestion),
+            wantCoverLetterPdf: coverField?.type === "file",
+          },
+        });
+        tailorJobId = start?.jobId;
+        if (!tailorJobId) {
+          report.error = `Bridge offline or failed (${start?.error ?? profileRes?.error ?? "no response"}) — start it with \`pnpm bridge\``;
+          status({ tone: "err", text: report.error });
+        }
+      }
+    } else {
+      status({ tone: "ok", text: `Step ${step} · ${first.filled.length} fields filled` }, "ok");
+    }
+
     // Prefer the labelled Resume field over unlabelled "autofill from
     // resume" drop zones (Ashby), which re-parse and overwrite the form.
     const resumeFields = fields.filter((f) => f.type === "file" && f.extractedValueType === "resume");
     const resumeField =
       resumeFields.find((f) => /resume|cv|curriculum/i.test(f.label)) ?? resumeFields[0];
-    const resumeInput = resumeField
-      ? (findField(doc, resumeField.id) as HTMLInputElement | null)
-      : null;
-    let attached = false;
-    if (resumeInput) {
-      const pdf = await send({ type: "FETCH_PDF", jobId: start.jobId, kind: "resume" });
-      if (pdf?.base64) attached = attachFile(resumeInput, base64ToFile(pdf.base64, result.fileName));
-    }
-    if (coverField?.type === "file" && result.hasCoverLetterPdf) {
-      const input = findField(doc, coverField.id) as HTMLInputElement | null;
-      const pdf = await send({ type: "FETCH_PDF", jobId: start.jobId, kind: "cover-letter" });
-      if (input && pdf?.base64) {
-        attachFile(
-          input,
-          base64ToFile(pdf.base64, result.fileName.replace(/\.pdf$/, "_Cover_Letter.pdf")),
-        );
+    const answers: { fieldId: string; value: string }[] = [];
+    let attachedNote = "";
+    if (!wizard || resumeField || coverField) {
+      await awaitTailoring();
+      const root = scopeRoot(doc);
+      const shown = (root instanceof Document ? root.documentElement : root).textContent ?? "";
+      if (result && tailorJobId && resumeField && !shown.includes(result.fileName)) {
+        const input = findField(doc, resumeField.id) as HTMLInputElement | null;
+        const pdf = input ? await send({ type: "FETCH_PDF", jobId: tailorJobId, kind: "resume" }) : null;
+        const ok = !!pdf?.base64 && attachFile(input!, base64ToFile(pdf.base64, result.fileName));
+        attachedNote = ok ? `PDF attached (${result.pages} page)` : "PDF ready (attach manually)";
+      }
+      if (result && tailorJobId && coverField?.type === "file" && result.hasCoverLetterPdf) {
+        const input = findField(doc, coverField.id) as HTMLInputElement | null;
+        const pdf = await send({ type: "FETCH_PDF", jobId: tailorJobId, kind: "cover-letter" });
+        if (input && pdf?.base64) {
+          attachFile(input, base64ToFile(pdf.base64, result.fileName.replace(/\.pdf$/, "_Cover_Letter.pdf")));
+        }
+      }
+      if (result && coverField && coverField.type !== "file" && result.coverLetter) {
+        answers.push({ fieldId: coverField.id, value: result.coverLetter });
+      }
+      if (result && !wizard) answers.push(...result.answers);
+      if (result && (resumeField || coverField)) {
+        // Resume parsers (Lever, Ashby, Workday) overwrite fields on upload —
+        // let them finish, then re-apply the profile values.
+        await sleep(ctx.settleMs ?? 1500);
+        await applyFill(plan.instructions.filter(untouched), doc);
       }
     }
-
-    // Resume parsers (Lever, Ashby) overwrite fields on upload — let them
-    // finish, then re-apply the profile values and Claude's answers.
-    await sleep(ctx.settleMs ?? 1500);
-    const untouched = (i: { fieldId: string }) => !touched.has(i.fieldId);
-    await applyFill(plan.instructions.filter(untouched), doc);
-    const answers = [...result.answers];
-    if (coverField && coverField.type !== "file" && result.coverLetter) {
-      answers.push({ fieldId: coverField.id, value: result.coverLetter });
+    if (wizard && questions.length) {
+      const start = await send({ type: "ANSWER_START", request: { job, fields: questions.map(toQuestion) } });
+      const done = start?.jobId ? await poll("ANSWER_POLL", start.jobId, "Drafting answers") : null;
+      if (Array.isArray(done?.answers)) answers.push(...done.answers);
     }
     const second = await applyFill(answers.filter(untouched), doc);
-
-    status(
-      {
-        tone: "ok",
-        text: `${attached ? `PDF attached (${result.pages} page)` : "PDF ready (attach manually)"} · ${second.filled.length} answers drafted`,
-      },
-      "wait",
-    );
-    if (result.warnings.length) {
+    if (attachedNote || second.filled.length) {
+      status({ tone: "ok", text: [attachedNote, `${second.filled.length} answers drafted`].filter(Boolean).join(" · ") }, "wait");
+    }
+    if (result?.warnings.length && step === 1 && !wizard) {
       status({ tone: "warn", text: `${result.warnings.length} things to double-check (Details)` });
     }
+
+    report.needsYou = highlightEmptyRequired(doc, fields);
+    if (wizard && resumeField && !result) report.needsYou.push(resumeField.id);
+    if (report.needsYou.length) {
+      report.stoppedAt = "needs-you";
+      status({ tone: "warn", text: `${report.needsYou.length} required fields need you` });
+      break;
+    }
+
+    const button = findStepButton(doc);
+    if (!button) {
+      report.stoppedAt = step === 1 ? "no-button" : "done";
+      break;
+    }
+    if (button.kind === "submit") {
+      report.stoppedAt = "review";
+      status({ tone: "ok", text: "Ready for review — check everything, then click Submit" });
+      break;
+    }
+    const before = stepSignature(doc);
+    press(button.el);
+    if (!(await waitForStepChange(doc, before, ctx.stepTimeoutMs))) {
+      report.stoppedAt = "errors";
+      report.errors = visibleErrors(doc);
+      status({ tone: "warn", text: report.errors.length ? `Step rejected: ${report.errors.join("; ")}` : "Step didn't advance — check the page" });
+      break;
+    }
+    if (step === MAX_STEPS) report.stoppedAt = "max-steps";
   }
 
-  report.needsYou = highlightEmptyRequired(doc, fields);
-  if (report.needsYou.length) {
-    status({ tone: "warn", text: `${report.needsYou.length} required fields need you` });
-  }
   await send({ type: "RUN_REPORT", report });
   return report;
 }
@@ -295,7 +369,11 @@ async function main(): Promise<void> {
   let posting = false;
   let ignoreRecent = false;
   let ranFill = false;
-  const last: { jobId?: string; result?: TailorResult } = {};
+  const last: { jobId?: string; jobUrl?: string; result?: TailorResult } = {};
+  // Edits the user makes between runs count too: resuming a paused wizard
+  // must not overwrite them.
+  const touched = new Set<string>();
+  trackUserEdits(document, touched, (e) => e.isTrusted);
   const ui: WidgetState = {
     mode: "form",
     title: "",
@@ -366,10 +444,13 @@ async function main(): Promise<void> {
         jd,
         jdSource: source,
         keywords: ui.keywords,
+        touched,
+        // Same job as a paused run: reuse its tailoring instead of re-running Claude.
+        tailorJobId: last.jobUrl === jd.url ? last.jobId : undefined,
         send: async (msg: unknown) => {
           const res = await send(msg);
           if ((msg as { type?: string })?.type === "TAILOR_START" && res?.jobId) {
-            last.jobId = res.jobId;
+            Object.assign(last, { jobId: res.jobId, jobUrl: jd.url });
           }
           return res;
         },

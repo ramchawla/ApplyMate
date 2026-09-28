@@ -56,6 +56,13 @@ describe("step change + errors", () => {
     expect(await waitForStepChange(d, stepSignature(d), 150)).toBe(false);
   });
 
+  it("sees a step that re-rendered synchronously inside the press", async () => {
+    const d = page(`<h2>My Information</h2><label for="a">First Name</label><input id="a">`);
+    const before = stepSignature(d);
+    d.body.innerHTML = `<h2>Review</h2>`;
+    expect(await waitForStepChange(d, before, 1000)).toBe(true);
+  });
+
   it("collects visible validation errors", () => {
     const d = page(`<div role="alert">Email is required</div><label for="p">Phone</label><input id="p" aria-invalid="true">
       <div data-automation-id="errorMessage">Enter a valid date</div>`);

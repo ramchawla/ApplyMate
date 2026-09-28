@@ -113,6 +113,10 @@ export interface RunReport {
   jdSource: string;
   filled: number;
   needsYou: string[];
+  // Wizard progress: steps visited and why the run stopped.
+  steps: number;
+  stoppedAt: "review" | "needs-you" | "errors" | "no-button" | "max-steps" | "done";
+  errors?: string[];
   result?: TailorResult;
   error?: string;
   at: number;

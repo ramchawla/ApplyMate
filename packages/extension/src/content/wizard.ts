@@ -72,14 +72,17 @@ export function waitForStepChange(doc: Document, before: string, ms = 12_000): P
       clearTimeout(cap);
       resolve(changed);
     };
-    const observer = new MutationObserver(() => {
+    const settle = () => {
       clearTimeout(quiet);
       quiet = setTimeout(() => {
         if (stepSignature(doc) !== before) done(true);
       }, 300);
-    });
+    };
+    const observer = new MutationObserver(settle);
     const cap = setTimeout(() => done(false), ms);
     observer.observe(doc.documentElement, { childList: true, subtree: true, attributes: true });
+    // The press may already have re-rendered synchronously.
+    settle();
   });
 }
 

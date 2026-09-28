@@ -152,6 +152,9 @@ describe("runOneClick", () => {
     );
     expect(report.result?.fileName).toBe("Jane_Dev_Acme.pdf");
     expect(report.needsYou).toEqual([]);
+    expect(report.stoppedAt).toBe("review");
+    expect(report.steps).toBe(1);
+    expect(sent.some((m) => m.type === "ANSWER_START")).toBe(false);
     expect(statuses[0]).toMatch(/filled/);
     expect(sent.some((m) => m.type === "RUN_REPORT")).toBe(true);
     vi.unstubAllGlobals();
