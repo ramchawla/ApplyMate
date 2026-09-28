@@ -299,8 +299,16 @@ async function fillListboxButton(btn: HTMLElement, value: string): Promise<boole
   return true;
 }
 
-// Workday prompt: type, Enter to search, pick the matching result.
+// Workday prompts show picks as pills beside a search box that stays empty.
+function promptHasSelection(input: Element): boolean {
+  const box = input.closest("[data-automation-id^='formField-']") ?? input.parentElement?.parentElement;
+  return !!box?.querySelector("[data-automation-id=selectedItem]");
+}
+
+// Workday prompt: type, Enter to search, pick the matching result. An existing
+// pick is kept — pressing it again can toggle a multiselect off.
 async function fillPrompt(input: HTMLInputElement, value: string): Promise<boolean> {
+  if (promptHasSelection(input)) return true;
   input.focus();
   typeInto(input, value.split(",")[0].trim());
   keyTap(input, "Enter");
@@ -369,11 +377,12 @@ export function attachFile(input: HTMLInputElement, file: File): boolean {
   return true;
 }
 
-function isEmpty(el: HTMLElement): boolean {
+export function isFieldEmpty(el: HTMLElement): boolean {
   if (isListboxButton(el)) return PLACEHOLDER.test((el.textContent ?? "").trim()) || !(el.textContent ?? "").trim();
   const toggles = toggleButtons(el);
   if (toggles.length) return !toggles.some((b) => b.getAttribute("aria-pressed") === "true");
   if (el.getAttribute("role") === "radiogroup") return !el.querySelector("[aria-checked=true]");
+  if (el instanceof HTMLInputElement && isPromptInput(el)) return !promptHasSelection(el);
   if (el instanceof HTMLInputElement) {
     if (el.type === "radio" || el.type === "checkbox") return !group(el).some((r) => r.checked);
     if (el.type === "file") return !el.files || el.files.length === 0;
@@ -394,7 +403,7 @@ export function highlightEmptyRequired(doc: Document, fields: FormField[]): stri
   for (const f of fields) {
     if (!f.required) continue;
     const el = findField(doc, f.id);
-    if (!el || !isEmpty(el)) continue;
+    if (!el || !isFieldEmpty(el)) continue;
     el.style.outline = "3px solid #facc15";
     el.style.outlineOffset = "1px";
     empty.push(f.id);

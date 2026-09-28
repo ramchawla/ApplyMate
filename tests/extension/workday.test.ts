@@ -1,0 +1,162 @@
+import { describe, it, expect } from "vitest";
+import {
+  isWorkday,
+  fillWorkdaySections,
+  fillWorkdayDates,
+} from "../../packages/extension/src/content/adapters/workday";
+import { runOneClick } from "../../packages/extension/src/content/content";
+import { extractLiveFields } from "../../packages/extension/src/content/extractors/form";
+import { applyFill, highlightEmptyRequired } from "../../packages/extension/src/content/fill";
+import { normalizeProfile } from "../../packages/extension/src/utils/profile";
+
+const dateGroup = (aid: string, label: string, month = true) => `
+  <div data-automation-id="formField-${aid}"><label>${label}</label>
+    ${month ? `<input data-automation-id="dateSectionMonth-input" role="spinbutton" aria-label="Month">` : ""}
+    <input data-automation-id="dateSectionYear-input" role="spinbutton" aria-label="Year"></div>`;
+
+const WORK_ENTRY = (n: number) => `
+  <h4>Work Experience ${n}</h4><button>Delete</button>
+  <label for="w${n}-title">Job Title*</label><input id="w${n}-title" required>
+  <label for="w${n}-company">Company*</label><input id="w${n}-company">
+  <label for="w${n}-loc">Location</label><input id="w${n}-loc">
+  <input type="checkbox" id="w${n}-cur"><label for="w${n}-cur">I currently work here</label>
+  ${dateGroup("startDate", "From*")}${dateGroup("endDate", "To*")}
+  <label for="w${n}-desc">Role Description</label><textarea id="w${n}-desc"></textarea>`;
+const EDU_ENTRY = (n: number) => `
+  <h4>Education ${n}</h4>
+  <label for="e${n}-school">School or University*</label><input id="e${n}-school">
+  <label for="e${n}-degree">Degree*</label><input id="e${n}-degree">
+  <label for="e${n}-major">Field of Study</label><input id="e${n}-major">
+  <label for="e${n}-gpa">Overall Result (GPA)</label><input id="e${n}-gpa">
+  ${dateGroup("firstYearAttended", "From", false)}${dateGroup("lastYearAttended", "To", false)}`;
+
+// Workday "My Experience": each section's Add button appends an entry.
+function myExperience(extra = "") {
+  const d = document.implementation.createHTMLDocument("t");
+  d.body.innerHTML = `<h2>My Experience</h2>
+    <div data-automation-id="workExperienceSection"><h3>Work Experience</h3>
+      <button data-automation-id="add-button" aria-label="Add Work Experience">Add</button></div>
+    <div data-automation-id="educationSection"><h3>Education</h3>
+      <button data-automation-id="add-button" aria-label="Add Education">Add</button></div>
+    ${extra}
+    <button data-automation-id="pageFooterNextButton">Save and Continue</button>`;
+  const adds = { work: 0, edu: 0 };
+  for (const [section, key, entry] of [
+    ["workExperienceSection", "work", WORK_ENTRY],
+    ["educationSection", "edu", EDU_ENTRY],
+  ] as const) {
+    const box = d.querySelector(`[data-automation-id=${section}]`)!;
+    const add = box.querySelector("button")!;
+    add.addEventListener("click", () => {
+      const n = ++adds[key];
+      const div = d.createElement("div");
+      div.setAttribute("role", "group");
+      div.innerHTML = entry(n);
+      box.insertBefore(div, add);
+      add.textContent = "Add Another";
+    });
+  }
+  return { d, adds };
+}
+
+const profile = normalizeProfile({
+  name: { first: "Jane", last: "Dev" },
+  email: "j@x.com",
+  current: { title: "Staff Engineer" },
+  work: [
+    { company: "RBC", title: "Senior Software Engineer", location: "Toronto, ON", start: "2026-05", current: true, description: "Platform work." },
+    { company: "RBC", title: "Software Engineer", location: "Toronto, ON", start: "2024-06", end: "2026-04", description: "CI/CD." },
+  ],
+  education: [{ school: "University of Toronto", degree: "BSc", major: "Computer Science", start: "2020", end: "2024" }],
+});
+const val = (d: Document, id: string) => (d.getElementById(id) as HTMLInputElement).value;
+const dates = (d: Document, entry: number) =>
+  Array.from(d.querySelectorAll<HTMLInputElement>("[role=group]")[entry].querySelectorAll("[data-automation-id^=dateSection]")).map((i) => i.value);
+
+describe("Workday adapter", () => {
+  it("detects Workday by host or automation-id markup", () => {
+    expect(isWorkday(myExperience().d)).toBe(true);
+    const plain = document.implementation.createHTMLDocument("t");
+    plain.body.innerHTML = `<input id="a">`;
+    expect(isWorkday(plain)).toBe(false);
+  });
+
+  it("adds one entry per profile item and fills them by label, dates via spinners", async () => {
+    const { d, adds } = myExperience();
+    const res = await fillWorkdaySections(d, profile, () => false);
+    expect(adds).toEqual({ work: 2, edu: 1 });
+    expect(res.added).toBe(3);
+    expect(val(d, "w1-title")).toBe("Senior Software Engineer");
+    expect(val(d, "w1-company")).toBe("RBC");
+    expect(val(d, "w1-loc")).toBe("Toronto, ON");
+    expect((d.getElementById("w1-cur") as HTMLInputElement).checked).toBe(true);
+    expect((d.getElementById("w2-cur") as HTMLInputElement).checked).toBe(false);
+    expect(val(d, "w2-title")).toBe("Software Engineer");
+    expect(val(d, "w2-desc")).toBe("CI/CD.");
+    expect(dates(d, 0)).toEqual(["05", "2026", "", ""]);
+    expect(dates(d, 1)).toEqual(["06", "2024", "04", "2026"]);
+    expect(val(d, "e1-school")).toBe("University of Toronto");
+    expect(val(d, "e1-major")).toBe("Computer Science");
+    expect(dates(d, 2)).toEqual(["2020", "2024"]);
+    // Every entry field belongs to the adapter (instant fill must skip them).
+    expect(res.owned).toContain("w2-title");
+  });
+
+  it("re-running adds nothing and keeps what the user changed", async () => {
+    const { d, adds } = myExperience();
+    await fillWorkdaySections(d, profile, () => false);
+    (d.getElementById("w1-title") as HTMLInputElement).value = "My Title";
+    (d.getElementById("w2-company") as HTMLInputElement).value = "";
+    const res = await fillWorkdaySections(d, profile, (id) => id === "w2-company");
+    expect(adds).toEqual({ work: 2, edu: 1 });
+    expect(res.added).toBe(0);
+    expect(val(d, "w1-title")).toBe("My Title");
+    expect(val(d, "w2-company")).toBe("");
+  });
+
+  it("fills a self-identify Date spinner group with today, leaving other dates alone", () => {
+    const d = document.implementation.createHTMLDocument("t");
+    d.body.innerHTML = `<div data-automation-id="formField-dateSignedOn"><label>Date*</label>
+        <input data-automation-id="dateSectionMonth-input"><input data-automation-id="dateSectionDay-input">
+        <input data-automation-id="dateSectionYear-input"></div>
+      ${dateGroup("availableDate", "When can you start?")}`;
+    fillWorkdayDates(d, new Date(2026, 8, 7));
+    expect(Array.from(d.querySelectorAll("input")).map((i) => i.value)).toEqual(["09", "07", "2026", "", ""]);
+  });
+
+  it("the wizard gives entry fields to the adapter, not the instant fill", async () => {
+    const { d } = myExperience(`<label for="res">Resume</label><input type="file" id="res">`);
+    const report = await runOneClick({
+      doc: d, fields: extractLiveFields(d), keywords: [], pollMs: 1, settleMs: 1, stepTimeoutMs: 300,
+      tailorJobId: "T0",
+      jd: { url: "u", title: "", company: "", description: "" }, jdSource: "none",
+      send: async (m: any) => (m.type === "GET_PROFILE" ? profile : { error: "offline" }),
+      onStatus: () => {},
+    });
+    // "Job Title" maps to current-title in the profile; entries must keep their own.
+    expect(val(d, "w1-title")).toBe("Senior Software Engineer");
+    expect(val(d, "w2-title")).toBe("Software Engineer");
+    expect(report.filled).toBeGreaterThan(10);
+  });
+});
+
+describe("Workday prompts", () => {
+  const prompt = (selected: string) => {
+    const d = document.implementation.createHTMLDocument("t");
+    d.body.innerHTML = `<div data-automation-id="formField-source"><label for="src">How Did You Hear About Us?*</label>
+      <div data-automation-id="multiSelectContainer"><ul>${selected}</ul>
+      <div data-automation-id="multiselectInputContainer"><input id="src" data-automation-id="searchBox" required></div></div></div>`;
+    return d;
+  };
+  it("counts a selected pill as filled and never re-picks it", async () => {
+    const d = prompt(`<li data-automation-id="selectedItem">LinkedIn</li>`);
+    const [f] = extractLiveFields(d);
+    expect(highlightEmptyRequired(d, [f])).toEqual([]);
+    let typed = false;
+    d.getElementById("src")!.addEventListener("keydown", () => (typed = true));
+    expect((await applyFill([{ fieldId: f.id, value: "LinkedIn" }], d)).filled).toEqual([f.id]);
+    expect(typed).toBe(false);
+    const empty = prompt("");
+    expect(highlightEmptyRequired(empty, extractLiveFields(empty))).toHaveLength(1);
+  });
+});

@@ -4,6 +4,7 @@ import { extractLiveFields } from "./extractors/form";
 import { applyFill, attachFile, findField, highlightEmptyRequired } from "./fill";
 import { mountWidget, type WidgetState } from "./widget";
 import { FIELD_ATTR, press, sleep } from "./dom";
+import { fillWorkdayDates, fillWorkdaySections, isWorkday } from "./adapters/workday";
 import { activeScope, findStepButton, stepSignature, visibleErrors, waitForStepChange } from "./wizard";
 import { buildInstantPlan } from "../lib/field-mapping";
 import { normalizeProfile } from "../utils/profile";
@@ -180,16 +181,28 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
   let wizard = false;
   for (let step = 1; step <= MAX_STEPS; step++) {
     report.steps = step;
-    const fields = step === 1 ? ctx.fields : extractLiveFields(scopeRoot(doc));
-    const plan = buildInstantPlan(fields, profile);
+    let fields = step === 1 ? ctx.fields : extractLiveFields(scopeRoot(doc));
+    // Workday: repeating sections (one entry per profile job/school) and
+    // the self-identify date. Their fields are the adapter's, not the
+    // instant fill's ("Job Title" would get the current title everywhere).
+    let owned = new Set<string>();
+    let adapterFilled = 0;
+    if (isWorkday(doc)) {
+      const wd = await fillWorkdaySections(doc, profile, (id) => touched.has(id));
+      adapterFilled = wd.filled + fillWorkdayDates(doc);
+      owned = new Set(wd.owned);
+      if (wd.added) fields = extractLiveFields(scopeRoot(doc));
+    }
+    const plan = buildInstantPlan(fields.filter((f) => !owned.has(f.id)), profile);
     const first = await applyFill(plan.instructions.filter(untouched), doc);
-    report.filled += first.filled.length;
+    const filledHere = first.filled.length + adapterFilled;
+    report.filled += filledHere;
 
     const coverField = fields.find((f) => f.extractedValueType === "cover-letter");
     const questions = plan.pending.filter((f) => f !== coverField);
     if (step === 1) {
       wizard = findStepButton(doc)?.kind === "advance";
-      status({ tone: "ok", text: `${wizard ? "Step 1 · " : ""}${first.filled.length} fields filled` });
+      status({ tone: "ok", text: `${wizard ? "Step 1 · " : ""}${filledHere} fields filled` });
       if (!tailorJobId) {
         // Single page: one call tailors and answers. Wizard: answers come
         // per step from /answer so step 1 needn't wait for the resume.
@@ -209,7 +222,7 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
         }
       }
     } else {
-      status({ tone: "ok", text: `Step ${step} · ${first.filled.length} fields filled` }, "ok");
+      status({ tone: "ok", text: `Step ${step} · ${filledHere} fields filled` }, "ok");
     }
 
     // Prefer the labelled Resume field over unlabelled "autofill from
