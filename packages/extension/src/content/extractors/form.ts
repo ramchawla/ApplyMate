@@ -118,6 +118,17 @@ function optionLabel(input: HTMLInputElement, doc: Document): string {
   return cleanText(input.closest("label")?.textContent ?? input.value);
 }
 
+// Captcha response boxes and hidden honeypots must never be filled — a
+// filled honeypot flags the application as a bot. File inputs are exempt:
+// ATSs routinely hide them behind a styled upload button.
+function isTrapOrPlumbing(el: HTMLElement, htmlType: string): boolean {
+  if (/captcha/i.test(`${el.id} ${el.getAttribute("name") ?? ""}`)) return true;
+  if (htmlType === "file") return false;
+  const view = el.ownerDocument.defaultView;
+  const style = view ? view.getComputedStyle(el) : el.style; // detached docs: inline only
+  return style.display === "none" || style.visibility === "hidden";
+}
+
 function uniqueId(base: string, used: Set<string>): string {
   let id = base;
   for (let i = 2; used.has(id); i++) id = `${base}#${i}`;
@@ -143,6 +154,7 @@ export function extractLiveFields(
     if (tag === "input" && SKIP_TYPES.has(htmlType)) continue;
     // Validation mirrors (Greenhouse's requiredInput beside each dropdown).
     if (el.getAttribute("aria-hidden") === "true") continue;
+    if (isTrapOrPlumbing(el, htmlType)) continue;
 
     const input = el as HTMLInputElement;
     const groupInputs =

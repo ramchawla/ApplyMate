@@ -28,6 +28,16 @@ describe("extractLiveFields", () => {
     expect(d.querySelectorAll("[data-applymate-id]")).toHaveLength(0);
   });
 
+  it("skips captcha plumbing and hidden honeypots but keeps hidden file inputs", () => {
+    const d = doc(`
+      <textarea id="g-recaptcha-response" name="g-recaptcha-response" style="display: none"></textarea>
+      <label for="hp">Website</label><input id="hp" name="website_hp" style="display:none">
+      <label for="trap">Leave empty</label><input id="trap" style="visibility: hidden">
+      <label for="cv">Resume/CV</label><input id="cv" type="file" style="display:none">
+      <label for="e">Email</label><input id="e" type="email">`);
+    expect(extractLiveFields(d).map((f) => f.id)).toEqual(["cv", "e"]);
+  });
+
   it("skips hidden, submit and button inputs", () => {
     const d = doc(
       `<input type="hidden" name="h"><input type="submit"><input type="button"><input name="x">`,

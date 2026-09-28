@@ -32,13 +32,21 @@ export function setNativeChecked(el: HTMLInputElement, checked: boolean): void {
 // plain Events on mousedown.
 export function fireEvents(el: Element, types: string[]): void {
   for (const type of types) {
-    const init = { bubbles: true, cancelable: true };
+    const init = { bubbles: true, cancelable: true, button: 0 };
     el.dispatchEvent(
-      type === "click" || type.startsWith("mouse")
-        ? new MouseEvent(type, { ...init, button: 0 })
-        : new Event(type, init),
+      type.startsWith("pointer") && typeof PointerEvent === "function"
+        ? new PointerEvent(type, { ...init, pointerType: "mouse", isPrimary: true })
+        : type === "click" || type.startsWith("mouse") || type.startsWith("pointer")
+          ? new MouseEvent(type, init)
+          : new Event(type, init),
     );
   }
+}
+
+// A full human-like press. Widgets differ in which phase they act on:
+// Greenhouse's react-select wrapper opens on mouseup, others on mousedown.
+export function press(el: Element): void {
+  fireEvents(el, ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]);
 }
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

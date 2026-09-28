@@ -50,10 +50,18 @@ export function ruleAnswer(label: string, rules: Profile["answers"]): string | n
   return null;
 }
 
+// Yes/no and demographic values only make sense as a choice. In a free-text
+// box ("what address will you work from? type relocating") Claude answers.
+const CHOICE_ONLY = new Set([
+  "work-auth", "sponsorship", "relocate", "gender", "race", "hispanic", "veteran", "disability",
+]);
+const CHOICE_WIDGETS = new Set(["select", "radio", "combobox", "checkbox"]);
+
 export function profileValue(field: FormField, profile: Profile): string | null {
   const rule = ruleAnswer(field.label, profile.answers);
   if (rule !== null) return rule;
   const type = field.userSelectedValueType ?? field.extractedValueType;
+  if (type && CHOICE_ONLY.has(type) && !CHOICE_WIDGETS.has(field.type)) return null;
   const value = type ? GETTERS[type]?.(profile).trim() : "";
   return value ? value : null;
 }

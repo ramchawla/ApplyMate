@@ -49,8 +49,10 @@ describe("profileValue", () => {
     expect(profileValue(field("Name", "name"), profile)).toBe("Jane Dev");
     expect(profileValue(field("Preferred", "preferred-name"), profile)).toBe("Jane");
     expect(profileValue(field("Location", "location"), profile)).toBe("Toronto, ON");
-    expect(profileValue(field("Sponsorship?", "sponsorship"), profile)).toBe("No");
-    expect(profileValue(field("Gender", "gender"), profile)).toBe("Decline to self-identify");
+    expect(profileValue(field("Sponsorship?", "sponsorship", "select"), profile)).toBe("No");
+    expect(profileValue(field("Gender", "gender", "combobox"), profile)).toBe(
+      "Decline to self-identify",
+    );
   });
   it("returns null for empty profile values and unknown types", () => {
     expect(profileValue(field("Phone", "phone"), profile)).toBeNull();
@@ -62,6 +64,15 @@ describe("profileValue", () => {
     expect(profileValue(field("How did you find this job?", "how-heard"), profile)).toBe(
       "LinkedIn",
     );
+  });
+});
+
+describe("choice-only values", () => {
+  it("never puts a yes/no profile value into a free-text box", () => {
+    const p = normalizeProfile({ relocate: "Yes", work_auth: { sponsorship: "No" } });
+    expect(profileValue(field("What address will you work from? If relocating, type relocating", "relocate", "text"), p)).toBeNull();
+    expect(profileValue(field("Are you open to relocation?", "relocate", "combobox"), p)).toBe("Yes");
+    expect(profileValue(field("Do you require sponsorship?", "sponsorship", "radio"), p)).toBe("No");
   });
 });
 

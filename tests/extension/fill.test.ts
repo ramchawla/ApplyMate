@@ -151,6 +151,25 @@ describe("combobox fill without timers", () => {
   });
 });
 
+describe("combobox open sequence", () => {
+  it("opens widgets that only react to mouseup (Greenhouse's react-select wrapper)", async () => {
+    const d = doc(`<label for="g">Gender</label><div class="wrap"><input id="g" role="combobox"></div><div id="menu"></div><input type="hidden" id="val">`);
+    d.querySelector(".wrap")!.addEventListener("mouseup", () => {
+      for (const o of ["Male", "Female", "Decline To Self Identify"]) {
+        const el = d.createElement("div");
+        el.id = `react-select-g-option-${o.length}`;
+        el.textContent = o;
+        el.addEventListener("click", () => ((d.getElementById("val") as HTMLInputElement).value = o));
+        d.getElementById("menu")!.appendChild(el);
+      }
+    });
+    extractLiveFields(d);
+    const res = await applyFill([{ fieldId: "g", value: "Decline to self-identify" }], d);
+    expect(res.filled).toEqual(["g"]);
+    expect((d.getElementById("val") as HTMLInputElement).value).toBe("Decline To Self Identify");
+  });
+});
+
 describe("combobox option scoping", () => {
   it("ignores another combobox's open listbox (aria-controls)", async () => {
     const d = doc(`

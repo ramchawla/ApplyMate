@@ -1,5 +1,5 @@
 import type { FormField } from "../types";
-import { FIELD_ATTR, cssEscape, fireEvents, setNativeChecked, setNativeValue } from "./dom";
+import { FIELD_ATTR, cssEscape, fireEvents, press, setNativeChecked, setNativeValue } from "./dom";
 
 export interface FillInstruction {
   fieldId: string;
@@ -63,7 +63,7 @@ function labelOf(input: HTMLInputElement): string {
 function clickMatching(els: HTMLElement[], value: string): boolean {
   const i = matchOption(els.map(textOf), value);
   if (i === -1) return false;
-  fireEvents(els[i], ["mousedown", "mouseup", "click"]);
+  press(els[i]);
   return true;
 }
 
@@ -193,10 +193,16 @@ function waitForMatch(
 // the full list; if nothing matches, type the value (city head for
 // locations) to trigger search and pick from the results.
 async function fillCombobox(input: HTMLInputElement, value: string): Promise<boolean> {
+  const key = (k: string) => {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+    input.dispatchEvent(new KeyboardEvent("keyup", { key: k, bubbles: true, cancelable: true }));
+  };
   input.focus();
-  fireEvents(input, ["mousedown"]);
-  input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-  let pick = await waitForMatch(input, value, 600);
+  // Both triggers up front: some widgets open on press (Greenhouse: mouseup),
+  // others on ArrowDown. With the menu open, ArrowDown only moves the cursor.
+  press(input);
+  key("ArrowDown");
+  let pick = await waitForMatch(input, value, 1200);
   if (!pick) {
     setNativeValue(input, value.split(",")[0].trim());
     fireEvents(input, ["input"]);
@@ -204,11 +210,11 @@ async function fillCombobox(input: HTMLInputElement, value: string): Promise<boo
   }
   if (!pick) {
     // Leave no menu open behind us.
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    key("Escape");
     input.blur();
     return false;
   }
-  fireEvents(pick, ["mousedown", "mouseup", "click"]);
+  press(pick);
   return true;
 }
 
