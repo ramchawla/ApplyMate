@@ -7,7 +7,6 @@ import {
   createServer,
   validateTailorRequest,
 } from "../../packages/bridge/src/server";
-import { OutputStore } from "../../packages/bridge/src/store";
 import type { TailorRequest } from "../../lib/shared/types";
 
 const TOKEN = "t0ken";
@@ -52,7 +51,7 @@ function raw(
 }
 
 beforeAll(async () => {
-  server = createServer(new OutputStore(), {
+  server = createServer({
     token: TOKEN,
     profilePath,
     pairFile,

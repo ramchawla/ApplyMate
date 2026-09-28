@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { request, type Server } from "node:http";
 import { createServer } from "../../packages/bridge/src/server";
-import { OutputStore } from "../../packages/bridge/src/store";
 
 // Raw request lets us set a spoofed Host header that undici's fetch forbids.
 function rawGet(
@@ -24,10 +23,9 @@ function rawGet(
 
 let server: Server;
 let base: string;
-const store = new OutputStore();
 
 beforeAll(async () => {
-  server = createServer(store);
+  server = createServer();
   await new Promise<void>((r) => server.listen(0, r));
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : 0;
@@ -45,30 +43,9 @@ describe("bridge server", () => {
     expect((await res.json()).ok).toBe(true);
   });
 
-  it("rejects POST without jobUrl", async () => {
-    const res = await fetch(`${base}/output`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ resumeLatex: "x" }),
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it("stores and returns the latest output", async () => {
-    const post = await fetch(`${base}/output`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        jobUrl: "https://x.com/j",
-        resumeLatex: "\\item A",
-      }),
-    });
-    expect(post.status).toBe(200);
-
-    const get = await fetch(`${base}/output/latest`);
-    const body = await get.json();
-    expect(body.jobUrl).toBe("https://x.com/j");
-    expect(body.resumeLatex).toBe("\\item A");
+  it("404s removed legacy routes", async () => {
+    expect((await fetch(`${base}/output/latest`)).status).toBe(404);
+    expect((await fetch(`${base}/resume/keywords`)).status).toBe(404);
   });
 
   it("reflects CORS only for a chrome-extension origin", async () => {
@@ -87,7 +64,7 @@ describe("bridge server", () => {
 
   it("rejects a non-loopback Host header (DNS rebinding defense)", async () => {
     const port = Number(new URL(base).port);
-    const res = await rawGet(port, "/output/latest", "evil.example.com");
+    const res = await rawGet(port, "/profile", "evil.example.com");
     expect(res.status).toBe(403);
   });
 
@@ -101,11 +78,10 @@ describe("bridge server", () => {
 describe("bridge server with token", () => {
   let tokenServer: Server;
   let tokenBase: string;
-  const tokenStore = new OutputStore();
   const TOKEN = "secret-123";
 
   beforeAll(async () => {
-    tokenServer = createServer(tokenStore, { token: TOKEN });
+    tokenServer = createServer({ token: TOKEN });
     await new Promise<void>((r) => tokenServer.listen(0, r));
     const addr = tokenServer.address();
     const port = typeof addr === "object" && addr ? addr.port : 0;
@@ -121,62 +97,21 @@ describe("bridge server with token", () => {
     expect(res.status).toBe(200);
   });
 
-  it("rejects /output/latest without the token", async () => {
-    const res = await fetch(`${tokenBase}/output/latest`);
+  it("rejects protected routes without the token", async () => {
+    expect((await fetch(`${tokenBase}/profile`)).status).toBe(401);
+  });
+
+  it("rejects a wrong token", async () => {
+    const res = await fetch(`${tokenBase}/profile`, {
+      headers: { authorization: "Bearer nope" },
+    });
     expect(res.status).toBe(401);
   });
 
-  it("allows /output/latest with the bearer token", async () => {
-    const res = await fetch(`${tokenBase}/output/latest`, {
+  it("passes the token check with the bearer token", async () => {
+    const res = await fetch(`${tokenBase}/profile`, {
       headers: { authorization: `Bearer ${TOKEN}` },
     });
-    expect(res.status).toBe(200);
-  });
-
-  it("serves master resume keywords from a configured path", async () => {
-    const { mkdtempSync, writeFileSync } = await import("node:fs");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
-    const dir = mkdtempSync(join(tmpdir(), "applymate-"));
-    const texPath = join(dir, "resume-master.tex");
-    writeFileSync(
-      texPath,
-      "\\section{Skills} Rust, TypeScript, PostgreSQL, Docker",
-    );
-
-    const kwStore = new (await import("../../packages/bridge/src/store")).OutputStore();
-    const kwServer = (await import("../../packages/bridge/src/server")).createServer(
-      kwStore,
-      { masterResumePath: texPath },
-    );
-    await new Promise<void>((r) => kwServer.listen(0, r));
-    const addr = kwServer.address();
-    const port = typeof addr === "object" && addr ? addr.port : 0;
-
-    const res = await fetch(`http://127.0.0.1:${port}/resume/keywords`);
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.keywords).toContain("rust");
-    expect(body.keywords).toContain("typescript");
-    expect(body.keywords).toContain("postgresql");
-    expect(body.keywords).not.toContain("python");
-
-    await new Promise<void>((r) => kwServer.close(() => r()));
-  });
-
-  it("404s resume keywords when master resume is absent", async () => {
-    const kwStore = new (await import("../../packages/bridge/src/store")).OutputStore();
-    const kwServer = (await import("../../packages/bridge/src/server")).createServer(
-      kwStore,
-      { masterResumePath: "/nonexistent/resume-master.tex" },
-    );
-    await new Promise<void>((r) => kwServer.listen(0, r));
-    const addr = kwServer.address();
-    const port = typeof addr === "object" && addr ? addr.port : 0;
-
-    const res = await fetch(`http://127.0.0.1:${port}/resume/keywords`);
-    expect(res.status).toBe(404);
-
-    await new Promise<void>((r) => kwServer.close(() => r()));
+    expect(res.status).toBe(404); // authorized; no profile configured
   });
 });

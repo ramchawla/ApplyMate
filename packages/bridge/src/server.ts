@@ -4,12 +4,7 @@ import {
   type Server,
 } from "node:http";
 import { readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import type { OutputStore } from "./store";
 import type { Db } from "../../../lib/local/db";
-import { persistOutput } from "./persist";
-import { extractTechKeywords } from "../../../lib/shared/keywords";
 import { parse as parseYaml } from "yaml";
 import { JobQueue } from "./jobs";
 import { markApplied } from "./persist";
@@ -17,12 +12,11 @@ import type { TailorJobResult } from "./tailor-job";
 import type { TailorRequest } from "../../../lib/shared/types";
 
 export interface ServerOptions {
-  // When set, /output and /output/latest require `Authorization: Bearer <token>`.
+  // When set, every route except /health and /pair requires
+  // `Authorization: Bearer <token>`.
   token?: string;
-  // When set, each posted output is persisted to SQLite.
+  // When set, applied marks are persisted to SQLite.
   db?: Db;
-  // Override for tests; defaults to ~/.applymate/resume-master.tex.
-  masterResumePath?: string;
   // One-click tailoring: runs behind an async job queue (MV3 service workers
   // can die during a single 60s fetch, so the extension polls instead).
   tailor?: (req: TailorRequest) => Promise<TailorJobResult>;
@@ -119,10 +113,7 @@ export function validateTailorRequest(x: unknown): TailorRequest | string {
   };
 }
 
-export function createServer(
-  store: OutputStore,
-  options: ServerOptions = {},
-): Server {
+export function createServer(options: ServerOptions = {}): Server {
   const jobs = options.tailor
     ? new JobQueue<TailorRequest, TailorJobResult>(options.tailor)
     : null;
@@ -236,49 +227,6 @@ export function createServer(
         },
         (err: Error) => send(400, { error: err.message }),
       );
-      return;
-    }
-
-    if (req.method === "GET" && url === "/output/latest") {
-      return send(200, store.getLatest());
-    }
-
-    // Tech keywords found in the master resume — the extension diffs these
-    // against the JD's keywords to show the coverage gap before tailoring.
-    if (req.method === "GET" && url === "/resume/keywords") {
-      const path =
-        options.masterResumePath ??
-        join(homedir(), ".applymate", "resume-master.tex");
-      try {
-        const tex = readFileSync(path, "utf8");
-        return send(200, { keywords: extractTechKeywords(tex) });
-      } catch {
-        return send(404, { error: "master resume not found", path });
-      }
-    }
-
-    if (req.method === "POST" && url === "/output") {
-      let raw = "";
-      req.on("data", (chunk) => (raw += chunk));
-      req.on("end", () => {
-        try {
-          const parsed = JSON.parse(raw || "{}");
-          if (!parsed.jobUrl || typeof parsed.jobUrl !== "string") {
-            return send(400, { error: "jobUrl is required" });
-          }
-          store.set(parsed);
-          if (options.db) {
-            try {
-              persistOutput(options.db, parsed);
-            } catch (err) {
-              console.error("[ApplyMate] persist failed:", err);
-            }
-          }
-          return send(200, { stored: true });
-        } catch {
-          return send(400, { error: "invalid JSON" });
-        }
-      });
       return;
     }
 

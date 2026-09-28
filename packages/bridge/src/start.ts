@@ -3,7 +3,6 @@ import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "./server";
-import { OutputStore } from "./store";
 import { makeTailorJob } from "./tailor-job";
 import { openDb, migrate } from "../../../lib/local/db";
 
@@ -29,7 +28,7 @@ const token = loadToken();
 
 const db = openDb();
 migrate(db);
-const server = createServer(new OutputStore(), {
+const server = createServer({
   token,
   db,
   tailor: makeTailorJob({ dir, db }),

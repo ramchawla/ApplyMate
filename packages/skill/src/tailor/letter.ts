@@ -1,5 +1,22 @@
 import { parse } from "yaml";
-import { escapeLatex } from "../stages/assemble-latex";
+
+const LATEX_ESCAPES: Record<string, string> = {
+  "\\": "\\textbackslash{}",
+  "&": "\\&",
+  "%": "\\%",
+  $: "\\$",
+  "#": "\\#",
+  _: "\\_",
+  "{": "\\{",
+  "}": "\\}",
+  "~": "\\textasciitilde{}",
+  "^": "\\textasciicircum{}",
+};
+
+// Plain text → LaTeX in one pass, so replacements are never re-escaped.
+export function escapeLatex(s: string): string {
+  return s.replace(/[\\&%$#_{}~^]/g, (c) => LATEX_ESCAPES[c]);
+}
 
 export function profileName(profileYaml: string): { first: string; last: string } {
   try {

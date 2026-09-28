@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { tailorResume } from "../../packages/skill/src/tailor/run";
-import { coverLetterTex } from "../../packages/skill/src/tailor/letter";
+import { coverLetterTex, escapeLatex } from "../../packages/skill/src/tailor/letter";
 import type { TailorRequest } from "../../lib/shared/types";
 
 const masterTex = readFileSync(
@@ -214,5 +214,14 @@ describe("coverLetterTex", () => {
     const t = coverLetterTex("A & B", "Sincerely,\nA & B");
     expect(t).toContain("A \\& B");
     expect(t).toContain("Sincerely,\\\\\nA \\& B");
+  });
+});
+
+describe("escapeLatex", () => {
+  it("escapes special characters", () => {
+    expect(escapeLatex("C++ & 50% #1 _x")).toBe("C++ \\& 50\\% \\#1 \\_x");
+    expect(escapeLatex("a\\b {c} ~ ^")).toBe(
+      "a\\textbackslash{}b \\{c\\} \\textasciitilde{} \\textasciicircum{}",
+    );
   });
 });

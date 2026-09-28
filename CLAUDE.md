@@ -103,11 +103,8 @@ After changing extension code: rebuild, then ↻ reload at `chrome://extensions`
 - Names, contact, companies, titles, dates, education are never exposed to
   Claude for editing (`resume-doc.ts` only exposes summary, bullets, skills).
 
-## Legacy code (pending deletion, ask the user first)
+## History
 
-The old copy/paste flow and 5-stage pipeline are unused by the one-click path:
-`packages/skill/src/{stages/retrieve.ts,db/,embeddings/,manual/,cli/manual.ts}`,
-`packages/skill/{apply-to-job.md,docker-compose.yml,db/schema.sql}`, the
-`%%BULLETS%%` template path in `stages/assemble-latex.ts`, and the bridge's
-`/output` routes. `escapeLatex` in `assemble-latex.ts` is still used by
-`tailor/letter.ts` — move it before deleting.
+The earlier copy/paste flow (claude.ai prompt → `pnpm skill:manual`), the
+5-stage pgvector pipeline, and the `/apply-to-job` skill were deleted on
+2026-09-28 in favor of the one-click path; see git history before `one-click-core`.
