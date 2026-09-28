@@ -161,4 +161,22 @@ describe("runOneClick", () => {
     expect(report.error).toMatch(/bridge/i);
     expect(report.needsYou).toContain("first_name");
   });
+
+  it("survives a background worker that errors on every message", async () => {
+    const d = page(GREENHOUSE_LIKE);
+    const report = await runOneClick({
+      doc: d,
+      fields: extractLiveFields(d),
+      keywords: [],
+      pollMs: 1,
+      settleMs: 1,
+      jd: { url: "u", title: "", company: "", description: "" },
+      jdSource: "none",
+      send: async () => ({ error: "Could not establish connection" }),
+      onStatus: () => {},
+    });
+    expect(report.filled).toBe(0);
+    expect(report.error).toMatch(/Could not establish connection/);
+  });
 });
+

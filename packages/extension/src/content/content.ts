@@ -5,6 +5,7 @@ import { applyFill, attachFile, findField, highlightEmptyRequired } from "./fill
 import { mountWidget, type WidgetState } from "./widget";
 import { sleep } from "./dom";
 import { buildInstantPlan } from "../lib/field-mapping";
+import { normalizeProfile } from "../utils/profile";
 import { pickJD, rememberJD, type CachedJD, type PageJD } from "../lib/jd-cache";
 import type { FormField, Profile, RunReport, TailorResult } from "../types";
 
@@ -69,7 +70,8 @@ export async function runOneClick(ctx: OneClickContext): Promise<RunReport> {
   };
 
   // Phase 1 — instant fill from the profile.
-  const profile = (await send({ type: "GET_PROFILE" })) as Profile;
+  const profileRes = await send({ type: "GET_PROFILE" });
+  const profile: Profile = normalizeProfile(profileRes?.error ? {} : profileRes);
   const plan = buildInstantPlan(fields, profile);
   const first = await applyFill(plan.instructions, doc);
   status({ tone: "ok", text: `${first.filled.length} fields filled` });
@@ -111,7 +113,7 @@ export async function runOneClick(ctx: OneClickContext): Promise<RunReport> {
 
   let result: TailorResult | undefined;
   if (!start?.jobId) {
-    report.error = `Bridge offline or failed (${start?.error ?? "no response"}) — start it with \`pnpm bridge\``;
+    report.error = `Bridge offline or failed (${start?.error ?? profileRes?.error ?? "no response"}) — start it with \`pnpm bridge\``;
     status({ tone: "err", text: report.error });
   } else {
     const began = Date.now();
@@ -227,13 +229,17 @@ const inExtension =
   !!chrome.runtime &&
   !!(chrome.runtime as { onMessage?: unknown }).onMessage;
 
+const SEND_TIMEOUT_MS = 20_000;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function send(msg: unknown): Promise<any> {
   return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve({ error: "extension background did not respond" }), SEND_TIMEOUT_MS);
     try {
       chrome.runtime.sendMessage(msg, (res) => {
-        void chrome.runtime.lastError;
-        resolve(res ?? { error: "no response" });
+        clearTimeout(timer);
+        const lastError = chrome.runtime.lastError?.message;
+        resolve(res ?? { error: lastError ?? "no response" });
       });
     } catch (err) {
       resolve({ error: String(err) });
@@ -320,7 +326,9 @@ async function main(): Promise<void> {
       fields = extractLiveFields(document);
       const { jd, source } = await currentJD();
       ranFill = true;
-      const report = await runOneClick({
+      let report: RunReport;
+      try {
+        report = await runOneClick({
         doc: document,
         fields,
         jd,
@@ -338,6 +346,12 @@ async function main(): Promise<void> {
           widget?.render(ui);
         },
       });
+      } catch (err) {
+        ui.busy = false;
+        ui.lines = [...ui.lines, { tone: "err", text: `ApplyMate error: ${String((err as Error)?.message ?? err)}` }];
+        widget?.render(ui);
+        return;
+      }
       last.result = report.result;
       Object.assign(ui, {
         busy: false,
