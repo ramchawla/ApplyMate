@@ -8,34 +8,23 @@ End-to-end AI job application agent across Chrome MV3 extension + Next.js dashbo
 
 ---
 
-## Quickstart (local, all parts)
+## Quickstart (one-click flow)
 
 ```bash
 pnpm install
-
-# PDF compile prerequisite (one-time)
-brew install tectonic
-
-# 1. Vector DB (Docker) for the skill
-pnpm skill:db:up
-
-# 2. Bridge (prints a token; also saved to ~/.applymate/bridge-token)
-pnpm bridge
-
-# 3. Dashboard
-pnpm --filter @applymate/dashboard dev    # http://localhost:3001
-
-# 4. Extension: build, then load packages/extension/dist as an unpacked
-#    extension at chrome://extensions (Developer mode).
-pnpm build:extension
+brew install tectonic                 # PDF compile (one-time)
+pnpm profile:init                     # ~/.applymate/profile.yaml — fill phone, address, work_auth, salary
+pnpm bridge:install                   # bridge runs at login (launchd); logs in ~/.applymate/bridge.log
+pnpm build:extension                  # then chrome://extensions → Developer mode → Load unpacked → packages/extension/dist
 ```
 
-Then on a job page: trigger ApplyMate (toolbar icon or Ctrl/Cmd+Shift+Y) →
-validate fields → run `/apply-to-job` in Claude Code (posts to the bridge) →
-review the report → auto-fill → review → submit manually. Paste the bridge
-token into the side panel once. Run all tests with `pnpm -r test`.
-
----
+Open any job application (Greenhouse, Lever, Ashby, company career pages,
+embedded ATS iframes). Click **⚡ Autofill & Tailor** in the ApplyMate card:
+standard fields fill instantly; ~50-60s later the tailored one-page resume PDF
+is attached and custom questions are answered. Add keywords in the card when
+the page has no JD. Review, then click the site's Submit yourself — ApplyMate
+marks the application `applied`. Check tailoring with `pnpm tailor:smoke`.
+The legacy manual/copy-paste instructions below predate the one-click flow.
 
 ## 1. Architecture Overview
 

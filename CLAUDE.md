@@ -1,516 +1,113 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
----
+Guidance for Claude Code working in this repo.
 
 ## Project: ApplyMate
 
-End-to-end AI job application automation across Chrome MV3 extension + Next.js dashboard. 5-stage LLM pipeline (JD extraction → pgvector retrieval → anchor-validated rewriting → LaTeX assembly → cover letter generation) running locally on Claude Code Pro (no API calls). Generates tailored resumes, auto-fills forms, tracks versions by company. **Never submits automatically.**
+Local, zero-API-cost clone of Simplify Copilot's paid tier. One click on a job
+application page fills every standard field instantly, then attaches a
+Claude-tailored one-page resume PDF, a cover letter, and custom-question
+answers (~50-60s later). **Never submits** — the user clicks the site's Submit;
+ApplyMate only notices that click to mark the application `applied`.
 
----
+Roadmap: sub-project 1 (one-click core) is built. Next: #2 multi-step ATS
+(Workday, LinkedIn Easy Apply, iCIMS/SmartRecruiters/Taleo, custom widgets),
+#3 AIApply side (match-score badges, pre-tailor queue, dashboard tracker,
+profile/answers editor UI). Specs/plans live in `docs/superpowers/`.
 
-## Quick Start
+## How it works
 
-### Prerequisites
-- Node.js 18+
-- macOS/Linux (primary dev environment)
-- Claude Code Pro plan (local skill execution)
-- Master resume stored at `~/.applymate/resume-master.tex`
-- Experience corpus at `~/.applymate/experience.yaml`
+```
+content script (every frame, classic IIFE)          background SW            bridge (launchd, 127.0.0.1:4179)
+  widget (shadow DOM) ── ⚡ click ──────────────────► proxy fetch ───────────► POST /tailor → JobQueue (FIFO)
+  1. extract fields from live DOM (data-applymate-id)                            claude -p (subscription, JSON schema)
+  2. instant fill from profile (+ answer rules)                                  → splice edits into resume-master.tex
+  3. poll GET /tailor/:id every 2s ◄──────────────── proxy ◄──────────────────   → warn-only checks
+  4. attach PDF (DataTransfer), fill Claude answers                              → tectonic compile + page fit
+  5. re-apply profile values (resume parsers overwrite)                          → ~/.applymate/applications/<date-co-role>/
+  6. user clicks Submit → MARK_APPLIED ───────────────────────────────────────►  + SQLite (dashboard)
+```
 
-### Installation
+- **JD sourcing** (`lib/jd-cache.ts`): pasted override → JD on page → JD cached
+  from the posting page (same job key; Lever `/apply`, Ashby `/application`) →
+  most recent JD within 30 min (iframes) → none (keywords only).
+- **Keywords**: widget chips, sticky across jobs; sent as priority keywords.
+- **Tailoring** is judgment-led: Claude may reframe adjacent real work; code
+  checks only *warn* (invented/dropped metrics, seniority, keywords not in
+  corpus, dropped skills). Only LaTeX that breaks compilation is reverted.
+- **Page fit**: one page AND natural height ≤ master + one line (`\pagetotal`
+  probe). Otherwise largest-growth edits revert, then an add-back pass.
+
+## Commands
+
 ```bash
-# Install dependencies
 pnpm install
+pnpm profile:init        # writes ~/.applymate/profile.yaml (never overwrites)
+pnpm bridge:install      # launchd agent: bridge at login, restarts on crash
+pnpm bridge              # or run the bridge in the foreground
+pnpm bridge:unpair       # let a re-installed extension pair again
+pnpm tailor:smoke [jd]   # real end-to-end: claude -p + tectonic on your files
+pnpm build:extension     # dist/ → chrome://extensions → Load unpacked / ↻
+pnpm dev:dashboard       # http://localhost:3000
 
-# Create local config
-cp .env.example .env.local
-# Edit .env.local with your paths
-
-# Build extension (Vite)
-pnpm build:extension
-
-# Build dashboard (Next.js)
-pnpm build:dashboard
-
-# Start dev servers
-pnpm dev:extension    # Watch + rebuild on changes
-pnpm dev:dashboard    # http://localhost:3000
+pnpm test && pnpm test:skill && pnpm test:bridge     # extension / engine / bridge
+(cd packages/dashboard && npx vitest run)            # dashboard + real tectonic compile
+pnpm type-check && pnpm type-check:skill && pnpm type-check:bridge
 ```
 
-### Load Extension in Chrome
-1. Open `chrome://extensions`
-2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select `packages/extension/dist`
-5. Test on LinkedIn, Indeed, Greenhouse
+After changing bridge code: `launchctl kickstart -k gui/$(id -u)/com.applymate.bridge`.
+After changing extension code: rebuild, then ↻ reload at `chrome://extensions`.
 
----
+## Local files (`~/.applymate/`)
 
-## Architecture
+| File | Role |
+|---|---|
+| `resume-master.tex` | Single source of truth. Read-only to ApplyMate. pdfLaTeX-flavoured (Overleaf) — compiled via the tectonic compat shim |
+| `experience.yaml` | Ground-truth corpus Claude tailors from |
+| `generation-directives.md` | Audience profiles (FAANG/startup/enterprise/AI/platform) |
+| `profile.yaml` | Autofill values + `answers:` regex rules for repeat questions |
+| `bridge-token`, `paired-extension` | Bearer token (persistent) and the TOFU-paired extension origin |
+| `applications/<date>-<co>-<role>/` | `resume.tex/.pdf`, `cover-letter.md`, `report.json`, `jd.md` |
+| `app.db` | SQLite for the dashboard (applications, versions, JD archive) |
+| `bridge.log` | launchd stdout/stderr |
 
-### Directory Structure
-```
-ApplyMate/
-├── README.md                      # Full spec (5-stage pipeline, flows, decisions)
-├── packages/
-│   ├── extension/                 # Chrome MV3 (TypeScript + React)
-│   │   ├── src/
-│   │   │   ├── content/
-│   │   │   │   ├── content.ts     # Job board detection + JD extraction
-│   │   │   │   ├── detectors/     # LinkedIn, Indeed, Greenhouse, Lever, Ashby
-│   │   │   │   └── extractors/    # DOM parsing for JD + form fields
-│   │   │   ├── ui/
-│   │   │   │   ├── side-panel.tsx # Main side panel UI
-│   │   │   │   ├── components/    # Form validation, autofill, manual entry, etc.
-│   │   │   │   └── styles/
-│   │   │   ├── lib/
-│   │   │   │   ├── field-mapping.ts # Field-type → profile value mapping
-│   │   │   │   ├── manual-prompt.ts # Self-contained prompt for manual LLM path
-│   │   │   │   ├── bridge.ts        # Bridge server client
-│   │   │   │   └── profile.ts       # Profile storage
-│   │   │   ├── background.ts      # Message routing + session storage
-│   │   │   ├── types.ts           # Extension-local types
-│   │   │   └── utils/
-│   │   │       ├── storage.ts     # chrome.storage API wrappers
-│   │   │       └── messaging.ts   # Content ↔ Background ↔ Panel messaging
-│   │   ├── manifest.json
-│   │   └── vite.config.ts
-│   │
-│   ├── dashboard/                 # Next.js + SQLite + local tectonic binary
-│   │   ├── app/
-│   │   │   ├── applications/      # "Applications" board (list, filter, archive)
-│   │   │   ├── resumes/           # "Resume Versions" (view, diff, download)
-│   │   │   ├── jd-archive/        # "JD Archive" (search extracted postings)
-│   │   │   └── analytics/         # Submit rate, interview rate, keyword analysis
-│   │   ├── lib/
-│   │   │   ├── db.ts              # SQLite connection + queries
-│   │   │   ├── tectonic.ts        # Local tectonic binary wrapper (LaTeX → PDF)
-│   │   │   └── diff.ts            # Resume version comparison
-│   │   └── package.json
-│   │
-│   ├── bridge/                    # Local bridge server (port 4179, bearer token)
-│   │
-│   └── skill/                     # Claude Code skill: /apply-to-job
-│       ├── apply-to-job.md        # Skill definition
-│       ├── docker-compose.yml     # Optional local Postgres + pgvector
-│       ├── db/schema.sql
-│       └── src/
-│           ├── stages/
-│           │   ├── parse-jd.ts        # Stage 1: keywords, seniority, tech stack
-│           │   ├── retrieve.ts        # Stage 2: pgvector or in-memory KNN
-│           │   ├── rewrite.ts         # Stage 3: anchor-validated keyword injection
-│           │   ├── assemble-latex.ts  # Stage 4: LaTeX assembly
-│           │   └── cover-letter.ts    # Stage 5: markdown generation
-│           ├── validators/
-│           │   ├── invariant-checks.ts # Verify no hallucinations (core logic)
-│           │   └── plausibility.ts     # Confidence scoring
-│           ├── corpus/load.ts     # Load experience.yaml
-│           ├── embeddings/embedder.ts # Local MiniLM embeddings (@xenova/transformers)
-│           ├── db/pgvector.ts     # Optional Postgres KNN store
-│           ├── manual/process.ts  # Manual-LLM path: validate pasted response
-│           ├── cli/manual.ts      # pnpm skill:manual entrypoint
-│           ├── types.ts           # ApplyJobInput/Output interfaces
-│           └── index.ts           # Export main handler
-│
-├── lib/
-│   ├── shared/
-│   │   ├── types.ts               # Cross-package types
-│   │   └── constants.ts           # Board detection patterns, field mappings
-│   └── local/
-│       ├── experience-store.ts    # Load + query experience.yaml
-│       ├── resume-loader.ts       # Load master resume LaTeX
-│       └── pgvector.ts            # Vector DB setup (if using local postgres)
-│
-├── tests/
-│   ├── extension/                 # Content script extraction tests
-│   ├── skill/                     # 5-stage pipeline tests
-│   └── e2e/                       # Full flow: extract → generate → fill form
-│
-├── .env.example                   # Template for .env.local
-├── .gitignore                     # Never commit: .env.local, PDFs, API keys
-├── package.json                   # Monorepo (pnpm workspaces)
-└── pnpm-workspace.yaml
-```
-
-### System Architecture
-```
-User on Job Board
-    ↓
-Content Script (content.ts)
-├─ Detect board (LinkedIn, Indeed, etc.)
-├─ Extract JD text + parse HTML
-├─ Crawl form fields (name, email, resume, custom Q's)
-├─ Inject extension button into page
-└─ Send to Background: ExtractedJobData
-
-Background Worker (background.ts)
-├─ Receive extracted data from content
-├─ Store in chrome.storage.session
-└─ Notify side panel
-
-Side Panel (side-panel.tsx)
-├─ Display extracted data (editable)
-├─ Show form fields detected
-├─ User selects model + effort level
-├─ Button: "Generate Tailored Resume"
-    ↓
-Claude Code (Pro, local)
-    ├─ User runs /apply-to-job skill
-    ├─ [5-stage pipeline runs]
-    │   ├─ Stage 1: Parse JD → keywords
-    │   ├─ Stage 2: Query pgvector corpus → top-K experiences
-    │   ├─ Stage 3: Rewrite resume bullets (anchor-validated)
-    │   ├─ Stage 4: LaTeX assembly → compile to PDF (local tectonic binary)
-    │   └─ Stage 5: Generate cover letter (markdown)
-    ├─ Return: ApplyJobOutput
-    └─ User reviews plausibility report ✓
-    
-Side Panel (resumes tab)
-├─ Show tailored resume preview
-├─ Show cover letter
-├─ User approves or revises
-    ↓
-Side Panel (form auto-fill tab)
-├─ Auto-fill: name, email, resume (PDF), cover letter
-├─ Suggest answers to custom questions
-├─ User reviews + edits all fields
-    ↓
-Form Submission (manual, on LinkedIn/Indeed)
-├─ User clicks form "Submit" button (extension does NOT)
-├─ Extension logs application to dashboard
-└─ Saves tailored resume version + metadata
-
-Next.js Dashboard (http://localhost:3000)
-├─ Applications board (company, role, date, status)
-├─ Resume versions (side-by-side diffs)
-├─ JD archive (searchable, taggable)
-└─ Analytics (submit rate, interview rate, keyword performance)
-```
-
----
-
-## Development Commands
-
-### Extension
-```bash
-# Watch + rebuild on changes (Vite)
-pnpm dev:extension
-
-# Type check (extension)
-pnpm type-check
-
-# Test extraction logic
-pnpm test:extension
-
-# Build for production (creates dist/)
-pnpm build:extension
-
-# Debug: Open extension service worker DevTools
-# chrome://extensions → Find ApplyMate → Details → Inspect views (service worker)
-```
-
-### Dashboard
-```bash
-# Start dev server (http://localhost:3000)
-pnpm dev:dashboard
-
-# Build for production
-pnpm build:dashboard
-
-# Bridge server (extension → SQLite persistence)
-pnpm bridge
-pnpm test:bridge
-pnpm type-check:bridge
-```
-
-### Skill
-```bash
-# Test skill (unit tests for each stage; DB tests skip without Postgres)
-pnpm test:skill
-
-# Type check
-pnpm type-check:skill
-
-# Optional local Postgres + pgvector (in-memory KNN fallback works without it)
-pnpm skill:db:up
-pnpm skill:db:down
-
-# Manual LLM path: validate pasted claude.ai response, assemble, publish
-pnpm skill:manual
-```
-
-### All
-```bash
-# Install all dependencies
-pnpm install
-
-# Run extension tests (default)
-pnpm test
-```
-
----
-
-## Key Concepts
-
-### 1. Message Flow (Extension → Skill → Dashboard)
-Extension (side panel) + Claude Code + Dashboard don't share direct memory. Data flows:
-- Content script → Background → Side panel: `ExtractedJobData`
-- Side panel → Claude Code (user copy-pastes prompt OR extension opens URL)
-- Claude Code ↔ Skill: `/apply-to-job` input/output via chat
-- Dashboard ↔ SQLite: applications, resume versions, JD archive persisted locally
-
-**Important**: No cloud sync by default. Versions stored in `~/.applymate/applications/`.
-
-### 2. The 5-Stage Pipeline (in `packages/skill/src/stages/`)
-Each stage is a pure function that takes input, validates, returns output.
-
-```typescript
-// Stage 1: Parse JD
-parsedJD = parseJobDescription(jobDescription)
-// → { keywords, skills, seniority, techStack, ... }
-
-// Stage 2: Semantic Retrieval
-experiences = queryVectorDB(parsedJD.keywords)
-// → [ { experienceId, relevanceScore, suggestedBullet }, ... ]
-
-// Stage 3: Anchor-Validated Rewriting
-revivals = rewriteBullets(masterResume, experiences, parsedJD)
-// → For each bullet: { original, revised, changes, invariant_checks ✓ }
-
-// Stage 4: LaTeX Assembly
-latex = assembleLatex(templateLatex, revisions)
-pdf = compileToPDF(latex)  // local tectonic binary via dashboard /api/compile
-// → Both LaTeX string + PDF base64
-
-// Stage 5: Cover Letter
-coverLetter = generateCoverLetter(company, parsedJD, experiences)
-// → Markdown string
-```
-
-### 3. Anchor Validation (Core Safety Check)
-Keyword injection must validate against user's **experience corpus** (`~/.applymate/experience.yaml`). Never hallucinate skills.
-
-**Example**:
-```yaml
-# experience.yaml
-- id: "rust-async-http"
-  title: "Built HTTP server in Rust"
-  skills: [rust, async-await, concurrency, http]
-  metrics: "10k req/s, <100ms latency"
-  anchor: "Expert in async Rust systems programming"
-```
-
-When rewriting a bullet, if JD says "Rust + async", we inject only if corpus has that anchor. If JD says "Rust + Go", we only inject "Rust" (Go not in corpus).
-
-**File**: `packages/skill/src/validators/invariant-checks.ts`
-
-### 4. Resume Versioning
-Each application saves a unique version:
-```
-~/.applymate/applications/
-├── 2025-01-15-acme-senior-rust-engineer/
-│   ├── metadata.json           # { timestamp, company, jobTitle, model, effort, status }
-│   ├── job-description.md      # Extracted JD (reference)
-│   ├── resume-tailored.tex     # Generated LaTeX
-│   ├── resume-tailored.pdf     # Compiled PDF
-│   ├── cover-letter.md         # Generated markdown
-│   └── form-responses.json     # { fieldName: answer, ... }
-```
-
-Dashboard queries this directory, shows diffs, tracks which version got interviews.
-
-### 5. Form Field Detection
-Content script crawls `<form>` elements, finds inputs/textareas/selects. Returns structured `FormField[]`:
-```typescript
-interface FormField {
-  id: string;              // HTML id or name
-  label: string;           // Visible label text
-  type: "text" | "textarea" | "select" | "email" | "file" | ...;
-  placeholder?: string;
-  isRequired: boolean;
-  options?: string[];      // For selects
-}
-```
-
-Heuristic detection is ~90% accurate. User can manually add/edit fields in side panel.
-
-### 6. Never Auto-Submit
-Hard constraint. Extension stops at form preview step. User manually clicks submit on LinkedIn/Indeed/etc. Rationale: accidents happen. Always review.
-
----
-
-## Important Files to Know
+## Key files
 
 | File | Purpose |
-|------|---------|
-| `README.md` | Full spec (read first!) |
-| `packages/extension/src/content/content.ts` | Job board detection + extraction logic |
-| `packages/extension/src/ui/side-panel.tsx` | Main UI (3 tabs: data review, tailoring, form fill) |
-| `packages/extension/src/types.ts` | `ExtractedJobData`, `FormField`, etc. |
-| `packages/skill/src/stages/rewrite.ts` | Anchor-validated keyword injection (core) |
-| `packages/packages/skill/src/validators/invariant-checks.ts` | Plausibility + hallucination checks |
-| `packages/dashboard/lib/db.ts` | SQLite queries (applications, versions) |
-| `lib/shared/types.ts` | Cross-package types |
-| `.env.example` | Config template (never commit .env.local) |
+|---|---|
+| `packages/extension/src/content/content.ts` | Gating, `runOneClick`, submit detection, SPA/field watchers |
+| `packages/extension/src/content/widget.ts` | Shadow-DOM widget (all dynamic text escaped) |
+| `packages/extension/src/content/extractors/form.ts` | Live-DOM fields, label resolution, value-type inference |
+| `packages/extension/src/content/fill.ts` | Fill text/select/radio/checkbox/combobox/radiogroup, `matchOption`, file attach |
+| `packages/extension/src/lib/field-mapping.ts` | Profile → field values, answer rules |
+| `packages/extension/src/background.ts` | Proxies bridge calls (pairing, tailor, poll, PDFs, applied) |
+| `packages/skill/src/tailor/` | `resume-doc` (ID-addressed parts), `prompt`, `claude-cli`, `checks`, `run` (orchestrator), `letter` |
+| `packages/bridge/src/server.ts` | Routes: `/pair`, `/tailor`, `/tailor/:id[/resume|cover-letter.pdf]`, `/profile`, `/applications/applied` |
+| `packages/bridge/src/tailor-job.ts` | Reads `~/.applymate`, runs tailoring, saves, names the PDF |
+| `lib/local/compile-latex.ts` | tectonic + pdfLaTeX compat shim + page/height probe |
+| `lib/shared/constants.ts` | Field keyword table, autocomplete map, board patterns |
 
----
+## Constraints (do not break)
 
-## Testing Strategy
+- Never click or trigger a site's submit.
+- Zero Anthropic API usage: generation only via `claude -p` on the user's
+  subscription. Never `--bare` (forces `ANTHROPIC_API_KEY`). Keep the
+  isolation flags + `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` so the user's global
+  CLAUDE.md/hooks don't leak into resumes or cover letters.
+- `APPLYMATE_MODEL` (default `sonnet`), `APPLYMATE_EFFORT` (default `low`, ~50s).
+- Bridge binds 127.0.0.1 only; everything but `/health` and `/pair` needs the
+  token; CORS reflects only `chrome-extension://`; pairing is POST (Chrome
+  guarantees `Origin` only on non-GET).
+- `dist/content.js` must stay a classic IIFE (no top-level `import`) — built by
+  `vite.content.config.ts`. An ES-module content script silently never runs.
+- Names, contact, companies, titles, dates, education are never exposed to
+  Claude for editing (`resume-doc.ts` only exposes summary, bullets, skills).
 
-### Unit Tests (per stage)
-```bash
-# Test JD parsing
-pnpm test:skill -- --testNamePattern="Stage 1"
+## Legacy code (pending deletion, ask the user first)
 
-# Test vector retrieval
-pnpm test:skill -- --testNamePattern="Stage 2"
-
-# Test anchor validation (critical)
-pnpm test:skill -- --testNamePattern="invariant-checks"
-```
-
-### Integration Tests
-```bash
-# Test full 5-stage pipeline
-pnpm test:skill -- --testNamePattern="pipeline"
-
-# Test extension extraction on real HTML
-pnpm test:extension -- --testNamePattern="LinkedIn"
-```
-
-### E2E
-No automated E2E suite yet; verify manually: load extension → extract on a real
-posting → generate (skill or manual-LLM path) → autofill → check dashboard.
-
-Focus: **anchor validation tests** are critical. Every change to rewriting logic must pass these.
-
----
-
-## Local Development Workflow
-
-### Typical Session
-1. **Start dev servers**:
-   ```bash
-   pnpm dev:extension &
-   pnpm dev:dashboard &
-   ```
-
-2. **Load extension in Chrome** (if not already):
-   - `chrome://extensions` → Load unpacked → select `packages/extension/dist`
-
-3. **Edit + test**:
-   - Modify content script → Vite auto-rebuilds → Chrome auto-reloads
-   - Modify side panel → Vite auto-rebuilds → Refresh side panel (Cmd+R)
-   - Modify skill → Test in Claude Code with `/apply-to-job` + sample input
-
-4. **Run full test suite**:
-   ```bash
-   pnpm test
-   ```
-
-5. **Debug extraction**:
-   - Open DevTools on any job board
-   - Console → Extension has logged extracted data
-   - Or: inspect Background service worker (see instructions in Extension section)
-
-### Debugging Tips
-- **Content script issues**: Check Chrome DevTools on the job posting page
-- **Background worker issues**: `chrome://extensions` → Details → "Inspect views (service worker)"
-- **Side panel issues**: Right-click on side panel → "Inspect" → DevTools
-- **Skill issues**: Claude Code chat shows detailed error messages
-
----
-
-## Deployment
-
-### Chrome Extension
-1. Build: `pnpm build:extension`
-2. Test locally (load unpacked)
-3. Publish to Chrome Web Store (or share as `.crx` for sideloading)
-
-### Next.js Dashboard
-- Run locally: `pnpm dev:dashboard` (no deployment needed for MVP)
-- Optional: Deploy to Vercel (`vercel deploy`)
-
-### Skill
-- Registered in Claude Code automatically (via `/apply-to-job` handler)
-- No deployment needed (runs locally on Pro plan)
-
----
-
-## Key Design Decisions (Why These Choices?)
-
-| Decision | Why |
-|----------|-----|
-| **No Claude API** | User already on Pro plan; no extra cost; works offline |
-| **Local resume storage** | Privacy; deterministic workflow; supports versioning |
-| **pgvector for retrieval** | Semantic search > keyword search for finding relevant experience |
-| **Anchor-validated rewriting** | Prevents hallucinated skills; all claims backed by corpus |
-| **Local tectonic binary for PDF** | Zero server cost; instant client-side compilation |
-| **SQLite for dashboard** | Small data volume; no external DB; portable |
-| **Never auto-submit** | User always reviews; prevents accidents |
-| **5-stage pipeline** | Separation of concerns; each stage testable independently |
-
----
-
-## Common Tasks
-
-### Add Support for New Job Board
-1. Create detector in `packages/extension/src/content/detectors/new-board.ts`
-2. Export from `detectors/index.ts`
-3. Content script checks URL pattern + runs detector
-4. Write extraction logic (JD + form fields)
-5. Add tests
-6. Test on real job posting
-
-### Improve Resume Rewriting
-1. Edit experience corpus (`~/.applymate/experience.yaml`)
-   - Add new projects or skills
-   - Refine `anchor` field (how to use this experience)
-2. Modify `packages/skill/src/stages/rewrite.ts` if needed
-3. Run tests: `pnpm test:skill -- --testNamePattern="invariant"`
-4. Test end-to-end with sample JD in Claude Code
-
-### Add Dashboard Feature
-1. Design schema addition (if needed) → `packages/dashboard/migrations/`
-2. Implement queries in `lib/db.ts`
-3. Create Next.js page in `app/`
-4. Test with real data
-
----
-
-## No-Nos
-
-❌ **Do NOT**:
-- Commit `.env.local` or any API keys
-- Auto-submit the form (extension must stop at review)
-- Hallucinate skills not in corpus (anchor validation is critical)
-- Store resume PDFs in git (they're in `~/.applymate/applications/` only)
-- Use Claude API (user is on Pro plan, use locally)
-- Change the 5-stage pipeline logic without tests
-
-✅ **DO**:
-- Test anchor validation after any rewriting change
-- Keep master resume (`~/.applymate/resume-master.tex`) as single source of truth
-- Always show plausibility report + reasoning to user
-- Never auto-submit; always show final review step
-- Test extraction on 2+ job boards before pushing
-
----
-
-## Resources
-
-- **README.md** — Full spec, flows, success criteria
-- **Skill Input/Output** — `packages/skill/types.ts`
-- **Extension Types** — `packages/extension/src/types.ts`
-- **5-Stage Logic** — `packages/skill/src/stages/` (each stage ~100-200 LOC)
-- **Invariant Checks** — `packages/packages/skill/src/validators/invariant-checks.ts` (core logic)
-
----
-
-## Questions?
-
-Refer to README.md first (covers all design decisions, flows, edge cases).
-If specific implementation detail unclear, check the stage handlers + test files.
+The old copy/paste flow and 5-stage pipeline are unused by the one-click path:
+`packages/skill/src/{stages/retrieve.ts,db/,embeddings/,manual/,cli/manual.ts}`,
+`packages/skill/{apply-to-job.md,docker-compose.yml,db/schema.sql}`, the
+`%%BULLETS%%` template path in `stages/assemble-latex.ts`, and the bridge's
+`/output` routes. `escapeLatex` in `assemble-latex.ts` is still used by
+`tailor/letter.ts` — move it before deleting.
