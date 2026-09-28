@@ -1,4 +1,5 @@
 import { bridgeFetch } from "./utils/bridge";
+import { jobKey } from "./lib/jd-cache";
 import { getProfile, normalizeProfile, saveProfile } from "./utils/profile";
 import type { Profile, RunReport, TailorRequest } from "./types";
 
@@ -9,7 +10,8 @@ type BgMessage =
   | { type: "FETCH_PDF"; jobId: string; kind: "resume" | "cover-letter" }
   | { type: "MARK_APPLIED"; jobUrl: string; company: string; jobTitle: string }
   | { type: "RUN_REPORT"; report: RunReport }
-  | { type: "OPEN_SIDE_PANEL" };
+  | { type: "OPEN_SIDE_PANEL" }
+  | { type: "TAB_JOB_KEY" };
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => {});
@@ -81,6 +83,9 @@ async function handle(msg: BgMessage, sender: chrome.runtime.MessageSender): Pro
     case "MARK_APPLIED":
       await json(await bridgeFetch("/applications/applied", post(msg)));
       return { ok: true };
+    case "TAB_JOB_KEY":
+      // Frames can't see their tab's URL; the side panel keys pasted JDs by it.
+      return { key: sender.tab?.url ? jobKey(sender.tab.url) : "" };
     case "RUN_REPORT":
       await chrome.storage.session.set({ [`lastRun:${sender.tab?.id ?? "x"}`]: msg.report });
       return { ok: true };

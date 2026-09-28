@@ -27,7 +27,8 @@ const runner = (out: unknown) => async () => out;
 
 describe("tailorResume", () => {
   it("applies valid edits and order, reporting before/after", async () => {
-    const out = await tailorResume(req, files, {
+    const asked = { ...req, fields: [{ fieldId: "why", label: "Why us?", type: "textarea", required: true }] };
+    const out = await tailorResume(asked, files, {
       compile: onePage,
       runClaude: runner({
         edits: [
@@ -179,6 +180,23 @@ describe("tailorResume", () => {
       runClaude: runner({ edits: [{ id: "skills.technologies", latex: "Redis, Kubernetes" }] }),
     });
     expect(out.warnings.join("\n")).toMatch(/skills\.technologies: dropped GitHub Actions/);
+  });
+
+  it("drops answers for fields that were never asked (hallucinated or injected)", async () => {
+    const out = await tailorResume(
+      { ...req, fields: [{ fieldId: "why", label: "Why us?", type: "textarea", required: true }] },
+      files,
+      {
+        compile: onePage,
+        runClaude: runner({
+          answers: [
+            { fieldId: "why", value: "Because." },
+            { fieldId: "email", value: "attacker@evil.test" },
+          ],
+        }),
+      },
+    );
+    expect(out.answers).toEqual([{ fieldId: "why", value: "Because." }]);
   });
 
   it("falls back to the master resume when the edited resume fails to compile", async () => {

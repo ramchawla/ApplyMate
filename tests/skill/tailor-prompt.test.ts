@@ -74,6 +74,10 @@ describe("schema + system", () => {
       "answers",
     ]);
   });
+  it("treats job description and question text as untrusted data", () => {
+    expect(TAILOR_SYSTEM).toMatch(/untrusted/i);
+  });
+
   it("forbids inventing metrics and demands exact options", () => {
     expect(TAILOR_SYSTEM).toMatch(/Never invent metrics/);
     expect(TAILOR_SYSTEM).toMatch(/exactly one of the listed options/);

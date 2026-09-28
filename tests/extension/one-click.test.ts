@@ -29,16 +29,27 @@ function page(html: string): Document {
 
 describe("gating", () => {
   it("recognizes application forms but not newsletters or logins", () => {
-    expect(isApplicationForm(extractLiveFields(page(GREENHOUSE_LIKE)))).toBe(true);
+    expect(isApplicationForm(extractLiveFields(page(GREENHOUSE_LIKE)), false)).toBe(true);
     expect(
       isApplicationForm(
         extractLiveFields(page(`<input type="email" placeholder="Email"><button>Subscribe</button>`)),
+        true,
       ),
     ).toBe(false);
     expect(
-      isApplicationForm(extractLiveFields(page(`<input type="email"><input type="password">`))),
+      isApplicationForm(extractLiveFields(page(`<input type="email"><input type="password">`)), true),
     ).toBe(false);
   });
+  it("needs a resume upload, or a known job plus email, before showing the widget", () => {
+    const contact = extractLiveFields(page(`<input name="first" placeholder="First name"><input name="last" placeholder="Last name">
+      <input type="email" name="email"><textarea name="message"></textarea>`));
+    expect(isApplicationForm(contact, false)).toBe(false);
+    expect(isApplicationForm(contact, true)).toBe(true);
+    const signup = extractLiveFields(page(`<input name="name"><input type="email"><input type="password"><input type="password">`));
+    expect(signup.map((f) => f.type)).not.toContain("password");
+    expect(isApplicationForm(signup, true)).toBe(false);
+  });
+
   it("recognizes submit controls but not Next/Apply-for-job links", () => {
     const d = page(
       `<button id="a">Submit application</button><button id="b">Next</button><button id="c"><span>Submit</span></button><a id="d">Apply for this job</a>`,
@@ -205,4 +216,36 @@ describe("runOneClick", () => {
     expect(got.dropzone).toEqual([]);
     vi.unstubAllGlobals();
   });
+
+  it("never overwrites what the user typed while tailoring ran", async () => {
+    const d = page(GREENHOUSE_LIKE);
+    const fields = extractLiveFields(d);
+    let polls = 0;
+    await runOneClick({
+      doc: d, fields, keywords: [], pollMs: 1, settleMs: 1, isUserEvent: () => true,
+      jd: { url: "u", title: "", company: "", description: "" }, jdSource: "none",
+      send: async (msg: any) => {
+        if (msg.type === "GET_PROFILE") return normalizeProfile({ email: "j@x.com" });
+        if (msg.type === "TAILOR_START") return { jobId: "J" };
+        if (msg.type === "TAILOR_POLL") {
+          if (++polls === 1) {
+            // The user reviews and edits during the wait.
+            for (const [id, v] of [["email", "fixed@x.com"], ["q1", "My own answer."]]) {
+              const el = d.getElementById(id) as HTMLInputElement;
+              el.value = v;
+              el.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+            return { status: "running" };
+          }
+          return { status: "done", result: { applicationId: "a", fileName: "R.pdf", coverLetter: "", hasCoverLetterPdf: false,
+            answers: [{ fieldId: "q1", value: "Claude's answer." }], keywords: { injected: [], skipped: [] }, edits: [], warnings: [], pages: 1, savedTo: "/x" } };
+        }
+        return { ok: true };
+      },
+      onStatus: () => {},
+    });
+    expect((d.getElementById("email") as HTMLInputElement).value).toBe("fixed@x.com");
+    expect((d.getElementById("q1") as HTMLTextAreaElement).value).toBe("My own answer.");
+  });
 });
+

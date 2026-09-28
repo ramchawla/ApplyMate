@@ -66,6 +66,7 @@ export async function tailorResume(
     cwd: deps.claudeCwd,
   });
   const out = parseTailorOutput(raw);
+  const asked = new Set(req.fields.map((f) => f.fieldId));
 
   const warnings: string[] = [];
   // Ground truth = corpus + the resume's own editable text. Not the whole
@@ -174,7 +175,9 @@ export async function tailorResume(
     pages: compiled.pages,
     coverLetter: out.coverLetter,
     coverLetterPdf,
-    answers: out.answers,
+    // Only questions we asked: a hallucinated or JD-injected fieldId could
+    // otherwise overwrite profile fields on the page (email, honeypots).
+    answers: out.answers.filter((a) => asked.has(a.fieldId)),
     keywords: out.keywords,
     edits,
     warnings,

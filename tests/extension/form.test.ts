@@ -38,6 +38,23 @@ describe("extractLiveFields", () => {
     expect(extractLiveFields(d).map((f) => f.id)).toEqual(["cv", "e"]);
   });
 
+  it("skips honeypots hidden by an ancestor or pushed off-screen", () => {
+    const d = doc(`
+      <div style="display:none"><label for="w">Website</label><input id="w" name="website"></div>
+      <label for="o">Company</label><input id="o" style="position:absolute; left:-9999px">
+      <div style="display:none"><label for="cv2">Resume</label><input id="cv2" type="file"></div>
+      <label for="e">Email</label><input id="e" type="email">`);
+    expect(extractLiveFields(d).map((f) => f.id)).toEqual(["cv2", "e"]);
+  });
+
+  it("keeps custom-styled radios and checkboxes (opacity 0 behind a styled span)", () => {
+    const d = doc(`<fieldset><label for="g">Gender</label>
+      <div><input type="radio" id="g0" name="g" style="opacity:0; position:absolute; left:-10000px"><label for="g0">Male</label></div>
+      <div><input type="radio" id="g1" name="g" style="opacity:0; position:absolute; left:-10000px"><label for="g1">Decline</label></div></fieldset>
+      <label><input type="checkbox" id="c" style="opacity:0; position:absolute; left:-10000px"> I agree</label>`);
+    expect(extractLiveFields(d).map((f) => f.id)).toEqual(["g", "c"]);
+  });
+
   it("skips hidden, submit and button inputs", () => {
     const d = doc(
       `<input type="hidden" name="h"><input type="submit"><input type="button"><input name="x">`,
@@ -137,11 +154,12 @@ describe("extractLiveFields", () => {
   });
 
   it("labels Ashby radio groups from the fieldset's question label", () => {
-    const d = doc(`<h1 class="application-label">Application</h1>
+    const d = doc(`<h1 id="tab" class="application-label">Application</h1>
+      <div role="tabpanel" aria-labelledby="tab">
       <div data-field-path="g"><fieldset><label for="g">Gender</label>
         <div><input type="radio" id="g-0" name="gg"><label for="g-0">Male</label></div>
         <div><input type="radio" id="g-1" name="gg"><label for="g-1">Decline to self-identify</label></div>
-      </fieldset></div>`);
+      </fieldset></div></div>`);
     expect(extractLiveFields(d)[0]).toMatchObject({ label: "Gender", options: ["Male", "Decline to self-identify"] });
   });
 

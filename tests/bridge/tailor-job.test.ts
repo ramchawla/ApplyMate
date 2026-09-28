@@ -40,7 +40,7 @@ describe("makeTailorJob", () => {
     const out = await job({
       job: { title: "Platform Eng", company: "Acme", url: "https://x/1", description: "JD text" },
       keywords: ["rust"],
-      fields: [],
+      fields: [{ fieldId: "q", label: "Why us?", type: "textarea", required: true }],
       wantCoverLetterPdf: false,
     });
     expect(out.result.fileName).toBe("Jane_Dev_Acme_Platform_Eng.pdf");

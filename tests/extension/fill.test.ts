@@ -31,6 +31,12 @@ describe("matchOption", () => {
   ])("%s → %i", (wanted, idx) => {
     expect(matchOption(opts, wanted as string)).toBe(idx);
   });
+  it("never matches inside another word (EEO misreports)", () => {
+    expect(matchOption(["Hispanic or Latino", "Not Hispanic or Latino", "Decline"], "No")).toBe(1);
+    expect(matchOption(["Woman (Female)", "Man (Male)"], "Male")).toBe(1);
+    expect(matchOption(["Yes", "Maybe"], "Ye")).toBe(-1);
+  });
+
   it("prefers exact over prefix", () => {
     expect(matchOption(["Not applicable", "No"], "no")).toBe(1);
   });

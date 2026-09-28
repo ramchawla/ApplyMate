@@ -15,7 +15,7 @@ function labelText(raw: string): string {
 }
 const REQUIRED_MARK = /[✱*]/;
 
-const SKIP_TYPES = new Set(["hidden", "submit", "button", "reset", "image", "search"]);
+const SKIP_TYPES = new Set(["hidden", "submit", "button", "reset", "image", "search", "password"]);
 const QUESTION_SELECTOR =
   "label, legend, [class*='label'], [class*='Label'], [class*='question'], [class*='Question']";
 
@@ -110,7 +110,10 @@ function rawLabel(el: HTMLElement, doc: Document): string {
 function groupRawLabel(first: HTMLElement, doc: Document): string {
   const legend = first.closest("fieldset")?.querySelector("legend");
   if (legend?.textContent?.trim()) return legend.textContent;
-  const byIds = labelledBy(first.closest("[aria-labelledby]") ?? first, doc);
+  // Only the group's own container: a page-level tabpanel's aria-labelledby
+  // ("Application") would otherwise label every group on the form.
+  const container = first.closest("fieldset, [role=radiogroup]");
+  const byIds = container ? labelledBy(container, doc) : "";
   if (byIds) return byIds;
   // Skip option labels (wrapping or pointing at a radio/checkbox); keep the
   // question label even when it has a for= (Ashby: fieldset > label[for]).
@@ -135,10 +138,23 @@ function optionLabel(input: HTMLInputElement, doc: Document): string {
 // ATSs routinely hide them behind a styled upload button.
 function isTrapOrPlumbing(el: HTMLElement, htmlType: string): boolean {
   if (/captcha/i.test(`${el.id} ${el.getAttribute("name") ?? ""}`)) return true;
-  if (htmlType === "file") return false;
-  const view = el.ownerDocument.defaultView;
-  const style = view ? view.getComputedStyle(el) : el.style; // detached docs: inline only
-  return style.display === "none" || style.visibility === "hidden";
+  // Honeypots are text-like. File, radio and checkbox inputs are routinely
+  // hidden (opacity 0 / off-screen) behind styled buttons and spans.
+  if (["file", "radio", "checkbox"].includes(htmlType)) return false;
+  // Real browsers: one call covers ancestors, opacity and content-visibility.
+  const check = (el as HTMLElement & { checkVisibility?: (o: object) => boolean }).checkVisibility;
+  if (typeof check === "function" && el.ownerDocument.defaultView) {
+    if (!check.call(el, { checkVisibilityCSS: true, checkOpacity: true })) return true;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && (r.right < 0 || r.bottom < 0); // parked off-screen
+  }
+  // jsdom / detached documents: inline styles on the element and ancestors.
+  for (let n: HTMLElement | null = el; n; n = n.parentElement) {
+    const st = n.style;
+    if (st.display === "none" || st.visibility === "hidden") return true;
+    if (parseInt(st.left, 10) <= -1000 || parseInt(st.top, 10) <= -1000) return true;
+  }
+  return false;
 }
 
 function uniqueId(base: string, used: Set<string>): string {

@@ -14,6 +14,10 @@ describe("jobKey", () => {
     ["https://jobs.ashbyhq.com/acme/abc/application?utm=x", "jobs.ashbyhq.com/acme/abc"],
     ["https://acme.com/careers?gh_jid=42&utm_source=li", "acme.com/careers?gh_jid=42"],
     ["https://Job-Boards.greenhouse.io/acme/jobs/9/", "job-boards.greenhouse.io/acme/jobs/9"],
+    [
+      "https://boards.greenhouse.io/embed/job_app?for=acme&token=123&utm=x",
+      "boards.greenhouse.io/embed/job_app?for=acme&token=123",
+    ],
     ["not a url", "not a url"],
   ])("%s → %s", (url, key) => expect(jobKey(url)).toBe(key));
 });
@@ -31,6 +35,12 @@ describe("pickJD", () => {
     const r = pickJD(empty, { cache: cached, overrides: { "jobs.lever.co/acme/123": "pasted" } }, now);
     expect(r).toMatchObject({ source: "override", jd: { description: "pasted" } });
   });
+  it("lets an embedded form use the override pasted for its tab", () => {
+    const frame = { ...empty, url: "https://boards.greenhouse.io/embed/job_app?for=acme&token=1" };
+    const r = pickJD(frame, { cache: {}, overrides: { "acme.com/careers?gh_jid=1": "pasted for tab" } }, now, false, "acme.com/careers?gh_jid=1");
+    expect(r).toMatchObject({ source: "override", jd: { description: "pasted for tab" } });
+  });
+
   it("uses the page JD when long enough", () => {
     expect(pickJD({ ...empty, description: longJD }, { cache: {}, overrides: {} }, now).source).toBe(
       "page",

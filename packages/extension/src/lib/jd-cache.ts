@@ -16,7 +16,8 @@ export const RECENT_MS = 30 * 60_000;
 const MIN_PAGE_JD = 200;
 const MAX_AGE_MS = 7 * 86_400_000;
 const MAX_ENTRIES = 100;
-const KEEP_QUERY = new Set(["gh_jid", "jobid", "jid", "id", "job", "jk", "currentjobid"]);
+// Query params that identify the job (Greenhouse embeds: for=<board>&token=<job>).
+const KEEP_QUERY = new Set(["gh_jid", "jobid", "jid", "id", "job", "jk", "currentjobid", "for", "token"]);
 
 // Posting and application pages of the same job share a key: Lever/Ashby
 // apply pages drop the JD, so the form page looks up the posting's JD by key.
@@ -54,6 +55,7 @@ export function pickJD(
   store: { cache: Record<string, CachedJD>; overrides: Record<string, string> },
   now: number,
   ignoreRecent = false,
+  tabKey?: string, // top-level page's key: an iframe form inherits its tab's pasted JD
 ): { jd: PageJD; source: JDSource } {
   const key = jobKey(page.url);
   const merge = (from: PageJD): PageJD => ({
@@ -63,7 +65,7 @@ export function pickJD(
     description: from.description,
   });
 
-  const override = store.overrides[key];
+  const override = store.overrides[key] ?? (tabKey ? store.overrides[tabKey] : undefined);
   if (override) return { jd: { ...page, description: override }, source: "override" };
   if (page.description.length >= MIN_PAGE_JD) return { jd: page, source: "page" };
   const cached = store.cache[key];

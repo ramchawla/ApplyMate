@@ -3,16 +3,19 @@ import { extractJD } from "./extractors/index";
 import { extractLiveFields } from "./extractors/form";
 import { applyFill, attachFile, findField, highlightEmptyRequired } from "./fill";
 import { mountWidget, type WidgetState } from "./widget";
-import { sleep } from "./dom";
+import { FIELD_ATTR, sleep } from "./dom";
 import { buildInstantPlan } from "../lib/field-mapping";
 import { normalizeProfile } from "../utils/profile";
 import { pickJD, rememberJD, type CachedJD, type PageJD } from "../lib/jd-cache";
 import type { FormField, Profile, RunReport, TailorResult } from "../types";
 
-export function isApplicationForm(fields: FormField[]): boolean {
+// A resume upload is the strongest signal. Otherwise require that we know
+// this is a job (posting detected or JD cached) — contact, checkout and
+// signup forms also have email + a few fields.
+export function isApplicationForm(fields: FormField[], jobKnown: boolean): boolean {
   const hasResume = fields.some((f) => f.type === "file" && f.extractedValueType === "resume");
   const hasEmail = fields.some((f) => f.extractedValueType === "email");
-  return hasResume || (hasEmail && fields.length >= 4);
+  return hasResume || (jobKnown && hasEmail && fields.length >= 4);
 }
 
 const SUBMIT_TEXT = /^(submit( my)?( application)?|send application|apply|apply now|finish)$/i;
@@ -46,6 +49,9 @@ export interface OneClickContext {
   onStatus: (lines: Line[]) => void;
   pollMs?: number;
   settleMs?: number;
+  // Which events count as the user editing a field (tests inject a stub;
+  // synthetic events from our own fills are never trusted).
+  isUserEvent?: (e: Event) => boolean;
 }
 
 const POLL_LIMIT_MS = 240_000;
@@ -58,6 +64,26 @@ function base64ToFile(b64: string, name: string): File {
 }
 
 export async function runOneClick(ctx: OneClickContext): Promise<RunReport> {
+  const { doc } = ctx;
+  // Anything the user edits during the run is theirs: never overwritten.
+  const isUserEvent = ctx.isUserEvent ?? ((e: Event) => e.isTrusted);
+  const touched = new Set<string>();
+  const onEdit = (e: Event) => {
+    if (!isUserEvent(e) || !(e.target instanceof Element)) return;
+    const id = e.target.closest(`[${FIELD_ATTR}]`)?.getAttribute(FIELD_ATTR);
+    if (id) touched.add(id);
+  };
+  doc.addEventListener("input", onEdit, true);
+  doc.addEventListener("change", onEdit, true);
+  try {
+    return await runPhases(ctx, touched);
+  } finally {
+    doc.removeEventListener("input", onEdit, true);
+    doc.removeEventListener("change", onEdit, true);
+  }
+}
+
+async function runPhases(ctx: OneClickContext, touched: Set<string>): Promise<RunReport> {
   const { doc, fields, send } = ctx;
   const lines: Line[] = [];
   const status = (line: Line, replaceTone?: Line["tone"]) => {
@@ -165,12 +191,13 @@ export async function runOneClick(ctx: OneClickContext): Promise<RunReport> {
     // Resume parsers (Lever, Ashby) overwrite fields on upload — let them
     // finish, then re-apply the profile values and Claude's answers.
     await sleep(ctx.settleMs ?? 1500);
-    await applyFill(plan.instructions, doc);
+    const untouched = (i: { fieldId: string }) => !touched.has(i.fieldId);
+    await applyFill(plan.instructions.filter(untouched), doc);
     const answers = [...result.answers];
     if (coverField && coverField.type !== "file" && result.coverLetter) {
       answers.push({ fieldId: coverField.id, value: result.coverLetter });
     }
-    const second = await applyFill(answers, doc);
+    const second = await applyFill(answers.filter(untouched), doc);
 
     status(
       {
@@ -283,10 +310,11 @@ async function main(): Promise<void> {
     canOpenPdf: false,
   };
 
+  const tabKey: string = isTop ? "" : ((await send({ type: "TAB_JOB_KEY" }))?.key ?? "");
   async function currentJD() {
     const cache = await storageGet<Record<string, CachedJD>>("jdCache", {});
     const overrides = await storageGet<Record<string, string>>("jdOverrides", {});
-    return pickJD(page, { cache, overrides }, Date.now(), ignoreRecent);
+    return pickJD(page, { cache, overrides }, Date.now(), ignoreRecent, tabKey || undefined);
   }
 
   async function refresh(readJD: boolean): Promise<void> {
@@ -309,9 +337,9 @@ async function main(): Promise<void> {
       }
     }
     fields = extractLiveFields(document, { stamp: false });
-    const isForm = isApplicationForm(fields);
-    if (!isForm && !posting) return;
     const { jd, source } = await currentJD();
+    const isForm = isApplicationForm(fields, posting || (source !== "none" && source !== "recent"));
+    if (!isForm && !posting) return;
     Object.assign(ui, {
       mode: isForm ? "form" : "posting",
       title: jd.title,

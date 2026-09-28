@@ -67,10 +67,14 @@ export function mountWidget(
   doc: Document,
   handlers: WidgetHandlers,
   placement: "bottom" | "top",
+  { trustedInputOnly = true }: { trustedInputOnly?: boolean } = {},
 ) {
   const host = doc.createElement("div");
   host.setAttribute("data-applymate-widget", "");
-  const root = host.attachShadow({ mode: "open" });
+  // Closed root + trusted-only input: the page (or an ad iframe) must never
+  // be able to press ⚡ and then read the filled profile/PDF back out.
+  const root = host.attachShadow({ mode: "closed" });
+  const fromUser = (e: Event) => !trustedInputOnly || e.isTrusted;
   doc.body.appendChild(host);
   let state: WidgetState | null = null;
 
@@ -89,6 +93,7 @@ export function mountWidget(
   };
 
   root.addEventListener("click", (e) => {
+    if (!fromUser(e)) return;
     const t = e.target as HTMLElement;
     const remove = t.closest("[data-remove]")?.getAttribute("data-remove");
     if (remove != null && state) {
@@ -103,13 +108,14 @@ export function mountWidget(
     else if (action === "toggle") handlers.onToggle();
   });
   root.addEventListener("keydown", (e) => {
+    e.stopPropagation(); // keep site shortcuts from eating keystrokes
+    if (!fromUser(e)) return;
     const t = e.target as HTMLInputElement;
     const key = (e as KeyboardEvent).key;
     if (t.dataset?.role === "kw" && (key === "Enter" || key === ",")) {
       e.preventDefault();
       addKeywords(t);
     }
-    e.stopPropagation(); // keep site shortcuts from eating keystrokes
   });
 
   function render(s: WidgetState): void {
@@ -181,5 +187,5 @@ export function mountWidget(
     if (!host.isConnected) (doc.body ?? doc.documentElement).appendChild(host);
   }
 
-  return { render, host, ensureAttached };
+  return { render, host, root, ensureAttached };
 }

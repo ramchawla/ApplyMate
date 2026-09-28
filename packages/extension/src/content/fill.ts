@@ -41,19 +41,27 @@ export function matchOption(options: string[], wanted: string): number {
   const w = wanted.trim().toLowerCase();
   if (!w) return -1;
   const opts = options.map((o) => o.trim().toLowerCase());
+  // Whole-word containment only: "no" must not match "Lati·no", nor "male"
+  // match "fe·male" — those would be silent, sensitive misreports.
+  const within = (needle: string, hay: string) =>
+    new RegExp(`(^|[^a-z0-9])${escapeRe(needle)}($|[^a-z0-9])`).test(hay);
   let i = opts.indexOf(w);
   if (i !== -1) return i;
   const word = new RegExp(`^${escapeRe(w)}\\b`);
   i = opts.findIndex((o) => word.test(o));
   if (i !== -1) return i;
-  i = opts.findIndex((o) => o.includes(w));
+  if (w === "no") {
+    i = opts.findIndex((o) => /^not\b/.test(o)); // "Not Hispanic or Latino"
+    if (i !== -1) return i;
+  }
+  i = opts.findIndex((o) => within(w, o));
   if (i !== -1) return i;
   const head = w.split(",")[0].trim();
   if (head && head !== w) {
     i = opts.findIndex((o) => o.startsWith(head));
     if (i !== -1) return i;
   }
-  i = opts.findIndex((o) => o.length > 2 && w.includes(o));
+  i = opts.findIndex((o) => o.length > 2 && within(o, w));
   if (i !== -1) return i;
   return DECLINE.test(w) ? opts.findIndex((o) => DECLINE.test(o)) : -1;
 }
