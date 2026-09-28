@@ -17,6 +17,7 @@
     "bridge:install": "pnpm --filter @applymate/bridge install-agent",
     "bridge:unpair": "pnpm --filter @applymate/bridge unpair",
     "profile:init": "pnpm --filter @applymate/bridge profile-init",
+    "profile:sync": "pnpm --filter @applymate/bridge profile-sync",
     "tailor:smoke": "pnpm --filter @applymate/bridge smoke",
     "test:bridge": "pnpm --filter @applymate/bridge test",
     "type-check:bridge": "pnpm --filter @applymate/bridge type-check"

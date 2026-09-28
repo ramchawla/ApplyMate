@@ -8,6 +8,7 @@
     "type-check": "tsc --noEmit",
     "install-agent": "tsx src/install-launchd.ts",
     "profile-init": "tsx src/profile-init.ts",
+    "profile-sync": "tsx src/profile-sync.ts",
     "smoke": "tsx src/smoke.ts",
     "unpair": "node -e \"require('fs').rmSync(require('os').homedir()+'/.applymate/paired-extension',{force:true})\""
   },

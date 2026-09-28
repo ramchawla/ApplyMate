@@ -91,3 +91,33 @@ describe("buildInstantPlan", () => {
     expect(plan.pending.map((f) => f.id)).toEqual(["Why us?", "Phone"]);
   });
 });
+
+describe("profile lists", () => {
+  it("normalizes work/education/skills/languages and accepts a legacy education object", () => {
+    const p = normalizeProfile({
+      work: [{ company: "RBC", title: "SWE", start: 2026, current: true }, "junk", null],
+      education: { school: "UofT", major: "CS" },
+      skills: ["TypeScript", 5, null],
+    });
+    expect(p.work).toEqual([
+      { company: "RBC", title: "SWE", location: "", start: "2026", end: "", current: "true", description: "" },
+    ]);
+    expect(p.education).toEqual([{ school: "UofT", degree: "", major: "CS", gpa: "", start: "", end: "" }]);
+    expect(p.skills).toEqual(["TypeScript", "5"]);
+    expect(p.languages).toEqual([]);
+    expect(normalizeProfile({ work: [{ company: "X", current: false }] }).work[0].current).toBe("");
+  });
+
+  it("falls back to the first work/education entry for single-value questions", () => {
+    const p = normalizeProfile({
+      work: [{ company: "RBC", title: "Senior Engineer" }],
+      education: [{ school: "UofT", degree: "BSc", end: "2024" }],
+    });
+    expect(profileValue(field("Current company", "current-company"), p)).toBe("RBC");
+    expect(profileValue(field("Current title", "current-title"), p)).toBe("Senior Engineer");
+    expect(profileValue(field("School", "school"), p)).toBe("UofT");
+    expect(profileValue(field("Degree", "degree"), p)).toBe("BSc");
+    const scalar = normalizeProfile({ current: { company: "Acme" }, work: [{ company: "RBC" }] });
+    expect(profileValue(field("Current company", "current-company"), scalar)).toBe("Acme");
+  });
+});

@@ -7,6 +7,25 @@ export type {
   RunReport,
 } from "../../../lib/shared/types";
 
+export interface WorkEntry {
+  company: string;
+  title: string;
+  location: string;
+  start: string;
+  end: string;
+  current: string; // "true" or ""
+  description: string;
+}
+
+export interface EducationEntry {
+  school: string;
+  degree: string;
+  major: string;
+  gpa: string;
+  start: string;
+  end: string;
+}
+
 export interface Profile {
   name: { first: string; last: string; preferred: string };
   email: string;
@@ -15,14 +34,12 @@ export interface Profile {
   location: string;
   links: { linkedin: string; github: string; portfolio: string };
   current: { company: string; title: string };
-  education: {
-    school: string;
-    degree: string;
-    major: string;
-    gpa: string;
-    start: string;
-    end: string;
-  };
+  // Most recent first. Lists feed wizard "Add" sections (Workday) and back
+  // the single-value company/title/school questions.
+  work: WorkEntry[];
+  education: EducationEntry[];
+  skills: string[];
+  languages: string[];
   work_auth: { authorized: string; sponsorship: string };
   start_date: string;
   salary: string;
