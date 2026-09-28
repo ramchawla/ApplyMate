@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Senior Software Engineer | Acme | LinkedIn</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; }
+  header { padding: 8px 16px; border-bottom: 1px solid #ddd; }
+  main { max-width: 760px; margin: 16px auto; }
+  [role=dialog] { position: fixed; inset: 40px 20%; background: #fff; border: 1px solid #999; padding: 16px; overflow: auto; }
+  label { display: block; margin-top: 10px; }
+  footer { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+  [role=alert] { color: #b00; }
+</style>
+</head>
+<body>
+<header><input role="combobox" aria-label="Search" id="global-search" placeholder="Search" class="search-global-typeahead__input"></header>
+<main class="jobs-search__job-details">
+  <h1 class="job-details-jobs-unified-top-card__job-title">Senior Software Engineer</h1>
+  <div class="job-details-jobs-unified-top-card__company-name"><a>Acme</a></div>
+  <div id="job-details" class="jobs-description__content">
+    <h2>About the job</h2>
+    <p>Acme is hiring a Senior Software Engineer to build developer platforms. You will design CI/CD with
+    GitHub Actions, run services on Kubernetes, write TypeScript and Go, and mentor engineers. 5+ years of
+    experience building distributed systems; experience with observability and incident response.</p>
+  </div>
+  <button id="easy-apply" class="jobs-apply-button" aria-label="Easy Apply to Senior Software Engineer at Acme">Easy Apply</button>
+</main>
+<script>
+window.__submitted = false;
+const STEPS = [
+  () => `<h3>Contact info</h3>
+    <label for="fn">First name*</label><input id="fn" required>
+    <label for="ln">Last name*</label><input id="ln" required>
+    <label for="em">Email address*</label><select id="em" required><option value="">Select an option</option><option>j@x.com</option><option>jane.dev@example.com</option></select>
+    <label for="cc">Phone country code*</label><select id="cc" required><option value="">Select an option</option><option>Canada (+1)</option><option>United States (+1)</option></select>
+    <label for="ph">Mobile phone number*</label><input id="ph" type="text" required>`,
+  () => `<h3>Resume</h3>
+    <p>Be sure to include an updated resume</p>
+    <div class="jobs-document-upload-redesign-card__container"><h3 class="jobs-document-upload-redesign-card__file-name">Old_Resume.pdf</h3></div>
+    <label for="upload" class="jobs-document-upload__upload-button">Upload resume</label>
+    <input type="file" id="upload" accept=".pdf,.doc,.docx" style="display:none">
+    <div id="uploaded"></div>`,
+  () => `<h3>Additional questions</h3>
+    <label for="yrs">How many years of work experience do you have with Kubernetes?*</label><input id="yrs" required>
+    <fieldset><legend>Are you comfortable working in a hybrid setting?*</legend>
+      <input type="radio" name="hy" id="hy-y" value="Yes" required><label for="hy-y" style="display:inline">Yes</label>
+      <input type="radio" name="hy" id="hy-n" value="No"><label for="hy-n" style="display:inline">No</label></fieldset>
+    <label for="sp">Will you now or in the future require sponsorship?*</label>
+    <select id="sp" required><option value="">Select an option</option><option>Yes</option><option>No</option></select>`,
+  () => `<h3>Review your application</h3><p>The employer will also receive a copy of your profile.</p>
+    <input type="checkbox" id="follow-company-checkbox" checked><label for="follow-company-checkbox" style="display:inline">Follow Acme to stay up to date with their page.</label>`,
+];
+const BUTTONS = [
+  `<button aria-label="Continue to next step" data-easy-apply-next-button><span>Next</span></button>`,
+  `<button aria-label="Back to previous step"><span>Back</span></button><button aria-label="Continue to next step"><span>Next</span></button>`,
+  `<button aria-label="Back to previous step"><span>Back</span></button><button aria-label="Review your application"><span>Review</span></button>`,
+  `<button aria-label="Back to previous step"><span>Back</span></button><button aria-label="Submit application" id="submit"><span>Submit application</span></button>`,
+];
+let at = 0;
+let dialog;
+function render() {
+  dialog.querySelector("#body").innerHTML = STEPS[at]();
+  dialog.querySelector("#progress").textContent = `${Math.round((at / (STEPS.length - 1)) * 100)}%`;
+  dialog.querySelector("footer").innerHTML = BUTTONS[at];
+  dialog.querySelector("#errs").innerHTML = "";
+}
+function invalid() {
+  return Array.from(dialog.querySelectorAll("[required]")).filter((el) =>
+    el.type === "radio" ? !dialog.querySelector(`input[name=${el.name}]:checked`) : !el.value.trim());
+}
+document.getElementById("easy-apply").addEventListener("click", () => {
+  dialog = document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+  dialog.className = "artdeco-modal jobs-easy-apply-modal";
+  dialog.setAttribute("aria-labelledby", "jobs-apply-header");
+  dialog.innerHTML = `<h2 id="jobs-apply-header">Apply to Acme</h2><div id="progress"></div>
+    <form id="body"></form><div id="errs"></div><footer></footer>`;
+  document.body.appendChild(dialog);
+  dialog.addEventListener("change", (e) => {
+    if (e.target.id === "upload" && e.target.files[0]) {
+      dialog.querySelector("#uploaded").innerHTML = `<h3 class="jobs-document-upload-redesign-card__file-name">${e.target.files[0].name}</h3>`;
+    }
+  });
+  dialog.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    const aria = b.getAttribute("aria-label");
+    if (aria === "Submit application") { window.__submitted = true; return; }
+    if (aria === "Back to previous step") { at--; render(); return; }
+    const bad = invalid();
+    if (bad.length) {
+      dialog.querySelector("#errs").innerHTML = `<div role="alert">Please enter a valid answer</div>`;
+      bad.forEach((el) => el.setAttribute("aria-invalid", "true"));
+      return;
+    }
+    // LinkedIn swaps the step after a short request round-trip.
+    setTimeout(() => { at++; render(); }, 120);
+  });
+  render();
+});
+</script>
+</body>
+</html>
