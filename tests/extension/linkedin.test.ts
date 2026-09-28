@@ -20,7 +20,7 @@ const STEPS = [
 ];
 
 // LinkedIn job page: global search typeahead outside, Easy Apply modal inside.
-function linkedIn() {
+function linkedIn(steps = STEPS) {
   const d = document.implementation.createHTMLDocument("t");
   d.body.innerHTML = `<header><input role="combobox" aria-label="Search" id="search"></header>
     <main><h1>Senior Engineer</h1><button>Easy Apply</button></main>
@@ -29,7 +29,7 @@ function linkedIn() {
   const log = { at: 0, presses: [] as string[] };
   const render = () => {
     const body = d.getElementById("body")!;
-    body.innerHTML = STEPS[log.at];
+    body.innerHTML = steps[log.at];
     for (const b of Array.from(body.querySelectorAll("button"))) {
       b.addEventListener("click", () => {
         log.presses.push(b.getAttribute("aria-label") ?? b.textContent!.trim());
@@ -80,4 +80,40 @@ describe("LinkedIn Easy Apply", () => {
     expect((d.getElementById("follow") as HTMLInputElement).checked).toBe(true);
     expect(sent.find((m) => m.type === "ANSWER_START").request.fields.map((f: any) => f.fieldId)).toEqual(["yrs"]);
   });
+
+  it("leaves page-level comboboxes alone on a review step with no fields", async () => {
+    // The user already follows the company: the review step has no fields.
+    const { d, log } = linkedIn([STEPS[0], STEPS[1], STEPS[2].replace(/<input type="checkbox".*Follow Acme<\/label>/s, "")]);
+    const report = await runOneClick({
+      doc: d, fields: scanForm(d), keywords: [], pollMs: 1, settleMs: 1, stepTimeoutMs: 600,
+      jd: { url: "u", title: "", company: "", description: "" }, jdSource: "page", onStatus: () => {},
+      send: async (m: any) => {
+        if (m.type === "GET_PROFILE") return normalizeProfile({ name: { first: "Jane" }, email: "j@x.com" });
+        if (m.type === "ANSWER_START") return { jobId: "A" };
+        if (m.type === "ANSWER_POLL") return { status: "done", answers: [{ fieldId: "yrs", value: "5" }, { fieldId: "search", value: "Toronto" }] };
+        return { ok: true };
+      },
+    });
+    expect(report.stoppedAt).toBe("review");
+    expect(log.presses).toEqual(["Continue to next step", "Review your application"]);
+    expect((d.getElementById("search") as HTMLInputElement).value).toBe("");
+  });
+
+  it("stops when the apply dialog closes mid-run instead of working the page", async () => {
+    const { d, log } = linkedIn();
+    d.body.insertAdjacentHTML("beforeend", `<button id="pager">Next</button>`);
+    let pagerPressed = false;
+    d.getElementById("pager")!.addEventListener("click", () => (pagerPressed = true));
+    // The user dismisses the modal while step 1's Next is in flight.
+    d.querySelector("[role=dialog] button")!.addEventListener("click", () => d.querySelector("[role=dialog]")!.remove());
+    const report = await runOneClick({
+      doc: d, fields: scanForm(d), keywords: [], pollMs: 1, settleMs: 1, stepTimeoutMs: 600,
+      jd: { url: "u", title: "", company: "", description: "" }, jdSource: "page", onStatus: () => {},
+      send: async (m: any) => (m.type === "GET_PROFILE" ? normalizeProfile({ name: { first: "Jane" }, email: "j@x.com" }) : { ok: true }),
+    });
+    expect(report.stoppedAt).toBe("closed");
+    expect(pagerPressed).toBe(false);
+    expect(log.presses).toEqual(["Continue to next step"]);
+  });
 });
+

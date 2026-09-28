@@ -56,6 +56,20 @@ describe("step change + errors", () => {
     expect(await waitForStepChange(d, stepSignature(d), 150)).toBe(false);
   });
 
+  it("never treats an unrecognised footer button as advance, whatever its automation id", () => {
+    const d = page(`<label for="a">Name</label><input id="a">
+      <button data-automation-id="bottom-navigation-next-button">Soumettre</button>
+      <button data-automation-id="pageFooterNextButton">Confirm and submit</button>`);
+    expect(findStepButton(d)).toBeNull();
+  });
+
+  it("keeps an apply dialog as the scope even when a step has no fields", () => {
+    const d = page(`<input role="combobox" aria-label="Search">
+      <div role="dialog" aria-labelledby="h"><h2 id="h">Apply to Acme</h2><p>Review</p>
+        <button aria-label="Submit application">Submit application</button></div>`);
+    expect(activeScope(d)).toBe(d.querySelector("[role=dialog]"));
+  });
+
   it("a cookie/consent dialog never captures the scope", () => {
     const d = page(`<label for="a">First Name</label><input id="a"><button>Submit application</button>
       <div role="dialog" aria-label="Cookie consent"><input type="checkbox" id="c"><button>Accept all</button></div>

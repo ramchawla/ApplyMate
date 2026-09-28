@@ -8,7 +8,9 @@ const SUBMIT_ARIA = /submit( your)? application/i;
 const ADVANCE_TEXT =
   /^(next|next step|continue|save (and|&) continue|review( your application)?|proceed)$/i;
 const ADVANCE_ARIA = /continue to next step|review your application/i;
-const ADVANCE_AID = /pageFooterNextButton|bottom-navigation-next-button/i;
+// Never pressed as "advance", whatever else matches (automation ids stay
+// "next-button" on some review pages).
+const SUBMITTISH = /submit|send|apply|finish|confirm|complete/i;
 
 // Visible and usable. Real browsers: checkVisibility; jsdom: inline styles.
 export function isShown(el: HTMLElement): boolean {
@@ -31,13 +33,30 @@ export function dialogName(dlg: Element): string {
   return cleanText([dlg.getAttribute("aria-label") ?? "", ...labelled, heading].join(" "));
 }
 
+// LinkedIn Easy Apply and similar. Counts even on a step with no fields
+// (review), so the scope never falls back to the page's own search boxes.
+export function isApplyDialog(dlg: Element): boolean {
+  return /\bappl(y|ication)\b/i.test(dialogName(dlg)) || /jobs-easy-apply/.test(dlg.className);
+}
+
+// Sign-in and account pages are the user's: a visible password box or a
+// sign-in/create-account heading.
+export function isSignInStep(scope: ParentNode): boolean {
+  return (
+    deepQueryAll<HTMLElement>(scope, "input[type=password]").some(isShown) ||
+    deepQueryAll<HTMLElement>(scope, "h1, h2, h3, [role=heading]").some(
+      (h) => isShown(h) && /\b(sign in|log in|create (an )?account|sign up)\b/i.test(h.textContent ?? ""),
+    )
+  );
+}
+
 // The open application dialog (LinkedIn Easy Apply modal) if any, else the
 // page. Cookie/consent dialogs and button-only notices never count.
 export function activeScope(doc: Document): ParentNode {
   const dialogs = deepQueryAll<HTMLElement>(doc, "[role=dialog], dialog[open]").filter(
     (d) =>
       isShown(d) &&
-      d.querySelector("input, textarea, select") &&
+      (isApplyDialog(d) || d.querySelector("input, textarea, select")) &&
       !/cookie|consent|privacy/i.test(dialogName(d)),
   );
   return dialogs[dialogs.length - 1] ?? doc;
@@ -56,11 +75,12 @@ export function findStepButton(doc: Document): StepButton | null {
   const aria = (b: HTMLElement) => b.getAttribute("aria-label") ?? "";
   const submit = buttons.find((b) => SUBMIT_TEXT.test(buttonText(b)) || SUBMIT_ARIA.test(aria(b)));
   if (submit) return { el: submit, kind: "submit" };
+  // Recognised by text or aria-label only: an unrecognised label (another
+  // language, "Confirm and submit") is as likely to be Submit — stop instead.
   const advance = buttons.find(
     (b) =>
-      ADVANCE_TEXT.test(buttonText(b)) ||
-      ADVANCE_ARIA.test(aria(b)) ||
-      ADVANCE_AID.test(b.getAttribute("data-automation-id") ?? ""),
+      (ADVANCE_TEXT.test(buttonText(b)) || ADVANCE_ARIA.test(aria(b))) &&
+      !SUBMITTISH.test(`${b.textContent ?? ""} ${aria(b)} ${(b as HTMLInputElement).value ?? ""}`),
   );
   return advance ? { el: advance, kind: "advance" } : null;
 }

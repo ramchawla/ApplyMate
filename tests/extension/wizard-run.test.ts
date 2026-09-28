@@ -241,4 +241,16 @@ describe("wizard engine", () => {
     expect(report.needsYou).toEqual(["agree"]);
     expect(log.nextPresses).toBe(0);
   });
+
+  it("stops at a sign-in step without filling or pressing anything there", async () => {
+    const { d, log } = wizard([
+      STEP_INFO,
+      `<h2>Sign In</h2><label for="em2">Email Address</label><input id="em2" type="email">
+       <label for="pw">Password</label><input id="pw" type="password"><button>Continue</button>`,
+    ]);
+    const report = await run(d, bridge().send);
+    expect(report.stoppedAt).toBe("sign-in");
+    expect(log.nextPresses).toBe(1);
+    expect((d.getElementById("em2") as HTMLInputElement).value).toBe("");
+  });
 });

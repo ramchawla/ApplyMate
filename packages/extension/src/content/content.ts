@@ -5,7 +5,7 @@ import { applyFill, attachFile, findField, highlightEmptyRequired, isFieldEmpty,
 import { mountWidget, type WidgetState } from "./widget";
 import { FIELD_ATTR, press, sleep } from "./dom";
 import { fillWorkdayDates, fillWorkdaySections, isWorkday } from "./adapters/workday";
-import { activeScope, dialogName, findStepButton, stepSignature, visibleErrors, waitForStepChange } from "./wizard";
+import { activeScope, findStepButton, isApplyDialog, isSignInStep, stepSignature, visibleErrors, waitForStepChange } from "./wizard";
 import { buildInstantPlan } from "../lib/field-mapping";
 import { normalizeProfile } from "../utils/profile";
 import { pickJD, rememberJD, type CachedJD, type PageJD } from "../lib/jd-cache";
@@ -25,8 +25,7 @@ const SUBMIT_TEXT = /^(submit( my)?( application)?|send application|apply|apply 
 // LinkedIn Easy Apply and similar: an open apply modal is the form.
 export function isApplicationDialogOpen(doc: Document): boolean {
   const scope = activeScope(doc);
-  if (!(scope instanceof Element)) return false;
-  return /\bappl(y|ication)\b/i.test(dialogName(scope)) || /jobs-easy-apply/.test(scope.className);
+  return scope instanceof Element && isApplyDialog(scope);
 }
 
 export function isSubmitControl(el: Element): boolean {
@@ -201,8 +200,22 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
   };
 
   let wizard = false;
+  let inDialog = false;
   for (let step = 1; step <= MAX_STEPS; step++) {
     report.steps = step;
+    const scope = activeScope(doc);
+    if (step === 1) inDialog = scope !== doc;
+    else if (inDialog && scope === doc) {
+      // Never carry on over the page (its search boxes, its pager "Next").
+      report.stoppedAt = "closed";
+      status({ tone: "warn", text: "Application dialog closed — stopped" });
+      break;
+    }
+    if (isSignInStep(scope)) {
+      report.stoppedAt = "sign-in";
+      status({ tone: "warn", text: "Sign in yourself, then press ⚡ again" });
+      break;
+    }
     let fields = step === 1 ? ctx.fields : extractLiveFields(scopeRoot(doc));
     // Workday: repeating sections (one entry per profile job/school) and
     // the self-identify date. Their fields are the adapter's, not the

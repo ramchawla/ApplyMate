@@ -115,7 +115,7 @@ export interface RunReport {
   needsYou: string[];
   // Wizard progress: steps visited and why the run stopped.
   steps: number;
-  stoppedAt: "review" | "needs-you" | "errors" | "no-button" | "max-steps" | "done";
+  stoppedAt: "review" | "needs-you" | "errors" | "no-button" | "max-steps" | "done" | "closed" | "sign-in";
   errors?: string[];
   result?: TailorResult;
   error?: string;
