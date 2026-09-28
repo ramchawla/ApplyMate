@@ -213,7 +213,8 @@ export function watchForInjectedFields(
     if (timer !== undefined) clearTimeout(timer);
     timer = setTimeout(onFieldsChanged, REEXTRACT_DEBOUNCE_MS);
   });
-  observer.observe(doc.body, { childList: true, subtree: true });
+  // documentElement, not body: hydration recovery can swap <body> out.
+  observer.observe(doc.documentElement, { childList: true, subtree: true });
   doc.defaultView?.addEventListener("pagehide", () => {
     if (timer !== undefined) clearTimeout(timer);
     observer.disconnect();
@@ -230,6 +231,7 @@ const inExtension =
   !!(chrome.runtime as { onMessage?: unknown }).onMessage;
 
 const SEND_TIMEOUT_MS = 20_000;
+const HYDRATION_GRACE_MS = 1000;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function send(msg: unknown): Promise<any> {
@@ -304,7 +306,7 @@ async function main(): Promise<void> {
         await storageSet({ jdCache: rememberJD(cache, page, Date.now()) });
       }
     }
-    fields = extractLiveFields(document);
+    fields = extractLiveFields(document, { stamp: false });
     const isForm = isApplicationForm(fields);
     if (!isForm && !posting) return;
     const { jd, source } = await currentJD();
@@ -402,11 +404,18 @@ async function main(): Promise<void> {
   watchForInjectedFields(document, () => void refresh(false));
   let lastUrl = location.href;
   setInterval(() => {
+    widget?.ensureAttached();
     if (location.href === lastUrl) return;
     lastUrl = location.href;
     void refresh(true);
   }, 1000);
 
+  // Touch nothing until the page has loaded and hydrated: React treats nodes
+  // added before hydration as a mismatch and re-renders the whole document.
+  if (document.readyState !== "complete") {
+    await new Promise((r) => window.addEventListener("load", r, { once: true }));
+  }
+  await sleep(HYDRATION_GRACE_MS);
   await refresh(true);
 }
 

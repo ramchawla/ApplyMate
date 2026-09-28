@@ -125,7 +125,12 @@ function uniqueId(base: string, used: Set<string>): string {
   return id;
 }
 
-export function extractLiveFields(doc: Document): FormField[] {
+// stamp=false scans without mutating the page — used for passive gating so
+// React/Remix hydration never sees foreign attributes. The fill pass stamps.
+export function extractLiveFields(
+  doc: Document,
+  { stamp = true }: { stamp?: boolean } = {},
+): FormField[] {
   const fields: FormField[] = [];
   const used = new Set<string>();
   const seenGroups = new Set<string>();
@@ -160,7 +165,7 @@ export function extractLiveFields(doc: Document): FormField[] {
         ((isGroup ? input.name : el.id || el.getAttribute("name")) || nextAnon()),
       used,
     );
-    for (const target of isGroup ? groupInputs : [el]) target.setAttribute(FIELD_ATTR, id);
+    if (stamp) for (const target of isGroup ? groupInputs : [el]) target.setAttribute(FIELD_ATTR, id);
 
     const type: FormField["type"] =
       tag === "textarea"
@@ -217,7 +222,7 @@ export function extractLiveFields(doc: Document): FormField[] {
     const radios = Array.from(group.querySelectorAll<HTMLElement>("[role=radio]"));
     if (radios.length === 0) continue;
     const id = uniqueId(group.getAttribute(FIELD_ATTR) ?? nextAnon(), used);
-    group.setAttribute(FIELD_ATTR, id);
+    if (stamp) group.setAttribute(FIELD_ATTR, id);
     const raw =
       group.getAttribute("aria-label") || labelledBy(group, doc) || questionText(group, () => false);
     const label = cleanText(raw);

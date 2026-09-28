@@ -67,4 +67,15 @@ describe("widget", () => {
     expect(root.querySelector("[data-action=run]")).toBeNull();
     expect(root.textContent).toContain("JD saved");
   });
+
+  it("re-attaches itself after the page re-renders and drops it", () => {
+    const { w } = setup();
+    w.render(base);
+    w.host.remove();
+    expect(w.host.isConnected).toBe(false);
+    w.ensureAttached();
+    expect(w.host.isConnected).toBe(true);
+    expect(w.host.shadowRoot!.querySelector("[data-action=run]")).not.toBeNull();
+  });
 });
+

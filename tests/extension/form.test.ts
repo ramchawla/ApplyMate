@@ -21,6 +21,13 @@ describe("extractLiveFields", () => {
     expect(extractLiveFields(d).map((f) => f.id)).toEqual(ids);
   });
 
+  it("can scan without touching the DOM (before a framework hydrates)", () => {
+    const d = doc(`<label for="e">Email</label><input id="e" type="email"><input type="text">`);
+    const fields = extractLiveFields(d, { stamp: false });
+    expect(fields.map((f) => f.extractedValueType)).toEqual(["email", null]);
+    expect(d.querySelectorAll("[data-applymate-id]")).toHaveLength(0);
+  });
+
   it("skips hidden, submit and button inputs", () => {
     const d = doc(
       `<input type="hidden" name="h"><input type="submit"><input type="button"><input name="x">`,

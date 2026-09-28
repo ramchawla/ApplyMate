@@ -175,5 +175,11 @@ export function mountWidget(
     if (hadFocus) input.focus();
   }
 
-  return { render, host };
+  // Frameworks that re-render the document (React hydration recovery on
+  // Remix/Next career sites) drop foreign nodes; put the card back.
+  function ensureAttached(): void {
+    if (!host.isConnected) (doc.body ?? doc.documentElement).appendChild(host);
+  }
+
+  return { render, host, ensureAttached };
 }
