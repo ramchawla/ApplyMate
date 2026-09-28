@@ -1,12 +1,5 @@
 import type { FormField } from "../types";
-import {
-  FIELD_ATTR,
-  cssEscape,
-  fireEvents,
-  setNativeChecked,
-  setNativeValue,
-  sleep,
-} from "./dom";
+import { FIELD_ATTR, cssEscape, fireEvents, setNativeChecked, setNativeValue } from "./dom";
 
 export interface FillInstruction {
   fieldId: string;
@@ -139,37 +132,80 @@ function fillCheckbox(el: HTMLInputElement, value: string): boolean {
 
 const OPTION_SELECTOR = "[role=option], [id*='-option-'], .select__option";
 
-async function waitForMatch(
-  doc: Document,
+// Options that belong to this combobox — never another widget's open menu
+// (e.g. the phone-country picker left open beside a react-select).
+function scopedOptions(input: HTMLInputElement): HTMLElement[] {
+  const doc = input.ownerDocument;
+  const owned = (input.getAttribute("aria-controls") ?? input.getAttribute("aria-owns") ?? "")
+    .split(/\s+/)
+    .map((id) => (id ? doc.getElementById(id) : null))
+    .filter((el): el is HTMLElement => !!el);
+  if (owned.length) return owned.flatMap((el) => Array.from(el.querySelectorAll<HTMLElement>(OPTION_SELECTOR)));
+  if (input.id) {
+    const rs = Array.from(
+      doc.querySelectorAll<HTMLElement>(`[id^="react-select-${cssEscape(input.id)}-option"]`),
+    );
+    if (rs.length) return rs;
+  }
+  const foreign = Array.from(doc.querySelectorAll<HTMLElement>("[role=combobox][aria-controls]"))
+    .filter((other) => other !== input)
+    .map((other) => doc.getElementById(other.getAttribute("aria-controls")!))
+    .filter((el): el is HTMLElement => !!el);
+  return Array.from(doc.querySelectorAll<HTMLElement>(OPTION_SELECTOR)).filter(
+    (o) =>
+      !foreign.some((f) => f.contains(o)) &&
+      !/^react-select-.+-option/.test(o.id), // another react-select's option
+  );
+}
+
+function findOption(input: HTMLInputElement, value: string): HTMLElement | null {
+  const options = scopedOptions(input);
+  const i = matchOption(options.map(textOf), value);
+  return i === -1 ? null : options[i];
+}
+
+// Resolves the moment a matching option is rendered. Driven by DOM mutations,
+// not polling: Chrome throttles timers in background tabs, observers aren't.
+function waitForMatch(
+  input: HTMLInputElement,
   value: string,
   ms: number,
 ): Promise<HTMLElement | null> {
-  const deadline = Date.now() + ms;
-  for (;;) {
-    const options = Array.from(doc.querySelectorAll<HTMLElement>(OPTION_SELECTOR));
-    const i = matchOption(options.map(textOf), value);
-    if (i !== -1) return options[i];
-    if (Date.now() > deadline) return null;
-    await sleep(50);
-  }
+  const doc = input.ownerDocument;
+  const now = findOption(input, value);
+  if (now) return Promise.resolve(now);
+  return new Promise((resolve) => {
+    const done = (pick: HTMLElement | null) => {
+      observer.disconnect();
+      clearTimeout(timer);
+      resolve(pick);
+    };
+    const observer = new MutationObserver(() => {
+      const pick = findOption(input, value);
+      if (pick) done(pick);
+    });
+    const timer = setTimeout(() => done(null), ms);
+    observer.observe(doc.documentElement, { childList: true, subtree: true, characterData: true });
+  });
 }
 
 // react-select / Ashby / async location pickers: open the menu and pick from
 // the full list; if nothing matches, type the value (city head for
 // locations) to trigger search and pick from the results.
 async function fillCombobox(input: HTMLInputElement, value: string): Promise<boolean> {
-  const doc = input.ownerDocument;
   input.focus();
   fireEvents(input, ["mousedown"]);
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-  let pick = await waitForMatch(doc, value, 600);
+  let pick = await waitForMatch(input, value, 600);
   if (!pick) {
     setNativeValue(input, value.split(",")[0].trim());
     fireEvents(input, ["input"]);
-    pick = await waitForMatch(doc, value, 2500);
+    pick = await waitForMatch(input, value, 2500);
   }
   if (!pick) {
+    // Leave no menu open behind us.
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    input.blur();
     return false;
   }
   fireEvents(pick, ["mousedown", "mouseup", "click"]);

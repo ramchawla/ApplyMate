@@ -123,6 +123,76 @@ describe("applyFill", () => {
   });
 });
 
+describe("combobox fill without timers", () => {
+  it("picks an option as soon as the menu renders, even if timers never fire (hidden tab)", async () => {
+    vi.useFakeTimers();
+    try {
+      const d = doc(`<label for="cb">Veteran Status</label><input id="cb" role="combobox"><div id="menu"></div><input type="hidden" id="val">`);
+      const input = d.getElementById("cb") as HTMLInputElement;
+      input.addEventListener("keydown", (e) => {
+        if ((e as KeyboardEvent).key !== "ArrowDown") return;
+        queueMicrotask(() => {
+          for (const o of ["I am not a protected veteran", "I don't wish to answer"]) {
+            const el = d.createElement("div");
+            el.id = `react-select-cb-option-${o.length}`;
+            el.textContent = o;
+            el.addEventListener("click", () => ((d.getElementById("val") as HTMLInputElement).value = o));
+            d.getElementById("menu")!.appendChild(el);
+          }
+        });
+      });
+      extractLiveFields(d);
+      const res = await applyFill([{ fieldId: "cb", value: "Decline to self-identify" }], d);
+      expect(res.filled).toEqual(["cb"]);
+      expect((d.getElementById("val") as HTMLInputElement).value).toBe("I don't wish to answer");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("combobox option scoping", () => {
+  it("ignores another combobox's open listbox (aria-controls)", async () => {
+    const d = doc(`
+      <input id="iti" role="combobox" aria-expanded="true" aria-controls="iti-list">
+      <ul id="iti-list" role="listbox"><li role="option">Decline to self-identify (wrong menu)</li></ul>
+      <label for="g">Gender</label><input id="g" role="combobox"><div id="gmenu"></div><input type="hidden" id="val">`);
+    const g = d.getElementById("g") as HTMLInputElement;
+    g.addEventListener("keydown", () => {
+      const el = d.createElement("div");
+      el.setAttribute("role", "option");
+      el.textContent = "Decline To Self Identify";
+      el.addEventListener("click", () => ((d.getElementById("val") as HTMLInputElement).value = "ok"));
+      d.getElementById("gmenu")!.appendChild(el);
+    });
+    const wrong = vi.fn();
+    d.querySelector("#iti-list [role=option]")!.addEventListener("click", wrong);
+    extractLiveFields(d);
+    const res = await applyFill([{ fieldId: "g", value: "Decline to self-identify" }], d);
+    expect(res.filled).toEqual(["g"]);
+    expect(wrong).not.toHaveBeenCalled();
+    expect((d.getElementById("val") as HTMLInputElement).value).toBe("ok");
+  });
+
+  it("uses react-select's per-input option ids", async () => {
+    const d = doc(`
+      <div id="react-select-other-option-0">No</div>
+      <label for="auth">Authorized?</label><input id="auth" role="combobox"><div id="m"></div>`);
+    const clicked: string[] = [];
+    d.getElementById("react-select-other-option-0")!.addEventListener("click", () => clicked.push("other"));
+    d.getElementById("auth")!.addEventListener("keydown", () => {
+      const el = d.createElement("div");
+      el.id = "react-select-auth-option-1";
+      el.textContent = "No";
+      el.addEventListener("click", () => clicked.push("auth"));
+      d.getElementById("m")!.appendChild(el);
+    });
+    extractLiveFields(d);
+    await applyFill([{ fieldId: "auth", value: "No" }], d);
+    expect(clicked).toEqual(["auth"]);
+  });
+});
+
 describe("attachFile", () => {
   it("sets files through DataTransfer and fires change", () => {
     const d = doc(`<input type="file" id="f">`);
