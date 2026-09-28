@@ -10,10 +10,13 @@ Claude-tailored one-page resume PDF, a cover letter, and custom-question
 answers (~50-60s later). **Never submits** — the user clicks the site's Submit;
 ApplyMate only notices that click to mark the application `applied`.
 
-Roadmap: sub-project 1 (one-click core) is built. Next: #2 multi-step ATS
-(Workday, LinkedIn Easy Apply, iCIMS/SmartRecruiters/Taleo, custom widgets),
-#3 AIApply side (match-score badges, pre-tailor queue, dashboard tracker,
-profile/answers editor UI). Specs/plans live in `docs/superpowers/`.
+On multi-step wizards (Workday, LinkedIn Easy Apply, SuccessFactors/Taleo/
+iCIMS-style) the same click fills each step, presses Next/Continue/Save and
+Continue, and stops on the review page whose button is Submit.
+
+Roadmap: #1 one-click core and #2 multi-step ATS are built. Next: #3 AIApply
+side (match-score badges, pre-tailor queue, dashboard tracker, profile/answers
+editor UI). Specs/plans live in `docs/superpowers/`.
 
 ## How it works
 
@@ -37,12 +40,25 @@ content script (every frame, classic IIFE)          background SW            bri
   corpus, dropped skills). Only LaTeX that breaks compilation is reverted.
 - **Page fit**: one page AND natural height ≤ master + one line (`\pagetotal`
   probe). Otherwise largest-growth edits revert, then an add-back pass.
+- **Wizard loop** (`runOneClick`, max 15 steps): scan the step (inside an open
+  apply dialog if any) → Workday adapter (Add entries per `profile.work`/
+  `education`, date spinners, self-identify date) → instant fill → on a resume
+  step await tailoring and attach → unanswered questions: single page from the
+  tailoring call, wizard steps from `POST /answer` (answers-only `claude -p`,
+  ~10s; dropdown buttons are opened once so Claude sees their options) → empty
+  required → pause · Submit visible → stop "Ready for review" · else press the
+  advance button and wait for the step to change (unchanged → pause with the
+  page's errors). Pressing ⚡ again resumes on the current step, reuses the
+  tailoring job, and never overwrites fields the user edited.
+- **Claude never answers** lone checkboxes (consent/terms/opt-ins) or fields
+  that already hold a value; only answers for asked fields are applied.
 
 ## Commands
 
 ```bash
 pnpm install
 pnpm profile:init        # writes ~/.applymate/profile.yaml (never overwrites)
+pnpm profile:sync        # claude -p fills empty work/education/skills/languages lists
 pnpm bridge:install      # launchd agent: bridge at login, restarts on crash
 pnpm bridge              # or run the bridge in the foreground
 pnpm bridge:unpair       # let a re-installed extension pair again
@@ -65,7 +81,7 @@ After changing extension code: rebuild, then ↻ reload at `chrome://extensions`
 | `resume-master.tex` | Single source of truth. Read-only to ApplyMate. pdfLaTeX-flavoured (Overleaf) — compiled via the tectonic compat shim |
 | `experience.yaml` | Ground-truth corpus Claude tailors from |
 | `generation-directives.md` | Audience profiles (FAANG/startup/enterprise/AI/platform) |
-| `profile.yaml` | Autofill values + `answers:` regex rules for repeat questions |
+| `profile.yaml` | Autofill values, `work`/`education`/`skills`/`languages` lists (most recent first), `answers:` regex rules for repeat questions |
 | `bridge-token`, `paired-extension` | Bearer token (persistent) and the TOFU-paired extension origin |
 | `applications/<date>-<co>-<role>/` | `resume.tex/.pdf`, `cover-letter.md`, `report.json`, `jd.md` |
 | `app.db` | SQLite for the dashboard (applications, versions, JD archive) |
@@ -75,21 +91,28 @@ After changing extension code: rebuild, then ↻ reload at `chrome://extensions`
 
 | File | Purpose |
 |---|---|
-| `packages/extension/src/content/content.ts` | Gating, `runOneClick`, submit detection, SPA/field watchers |
+| `packages/extension/src/content/content.ts` | Gating (incl. apply dialogs), `runOneClick` wizard loop, submit detection, SPA/field watchers |
+| `packages/extension/src/content/wizard.ts` | `activeScope`, `findStepButton` (submit wins), `stepSignature`, `waitForStepChange`, `visibleErrors` |
+| `packages/extension/src/content/adapters/workday.ts` | Repeating Add sections, date spinbuttons, self-identify date |
 | `packages/extension/src/content/widget.ts` | Shadow-DOM widget (all dynamic text escaped) |
 | `packages/extension/src/content/extractors/form.ts` | Live-DOM fields, label resolution, value-type inference |
-| `packages/extension/src/content/fill.ts` | Fill text/select/radio/checkbox/combobox/radiogroup, `matchOption`, file attach |
+| `packages/extension/src/content/fill.ts` | Fill text/select/radio/checkbox/combobox/radiogroup/dropdown buttons/search prompts, `matchOption`, `readOptions`, file attach |
+| `packages/extension/src/content/dom.ts` | Shadow-DOM-aware queries, native setters, press/type sequences |
 | `packages/extension/src/lib/field-mapping.ts` | Profile → field values, answer rules |
 | `packages/extension/src/background.ts` | Proxies bridge calls (pairing, tailor, poll, PDFs, applied) |
-| `packages/skill/src/tailor/` | `resume-doc` (ID-addressed parts), `prompt`, `claude-cli`, `checks`, `run` (orchestrator), `letter` |
-| `packages/bridge/src/server.ts` | Routes: `/pair`, `/tailor`, `/tailor/:id[/resume|cover-letter.pdf]`, `/profile`, `/applications/applied` |
+| `packages/skill/src/tailor/` | `resume-doc` (ID-addressed parts), `prompt`, `claude-cli`, `checks`, `run` (orchestrator), `letter`, `answer` (answers-only) |
+| `packages/bridge/src/server.ts` | Routes: `/pair`, `/tailor`, `/tailor/:id[/resume|cover-letter.pdf]`, `/answer`, `/answer/:id`, `/profile`, `/applications/applied` |
+| `packages/bridge/src/profile-sync.ts` | `pnpm profile:sync` (fills only empty profile lists) |
 | `packages/bridge/src/tailor-job.ts` | Reads `~/.applymate`, runs tailoring, saves, names the PDF |
 | `lib/local/compile-latex.ts` | tectonic + pdfLaTeX compat shim + page/height probe |
 | `lib/shared/constants.ts` | Field keyword table, autocomplete map, board patterns |
 
 ## Constraints (do not break)
 
-- Never click or trigger a site's submit.
+- Never click or trigger a site's submit. The wizard presses only advance
+  controls and stops when a submit control is visible.
+- Never automate sign-in/account creation; never auto-check consent/terms
+  unless a profile `answers` rule matches the label.
 - Zero Anthropic API usage: generation only via `claude -p` on the user's
   subscription. Never `--bare` (forces `ANTHROPIC_API_KEY`). Keep the
   isolation flags + `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` so the user's global

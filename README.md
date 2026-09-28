@@ -14,6 +14,7 @@ End-to-end AI job application agent across Chrome MV3 extension + Next.js dashbo
 pnpm install
 brew install tectonic                 # PDF compile (one-time)
 pnpm profile:init                     # ~/.applymate/profile.yaml — fill phone, address, work_auth, salary
+pnpm profile:sync                     # claude -p fills work/education/skills from your resume (only empty lists)
 pnpm bridge:install                   # bridge runs at login (launchd); logs in ~/.applymate/bridge.log
 pnpm build:extension                  # then chrome://extensions → Developer mode → Load unpacked → packages/extension/dist
 ```
@@ -24,6 +25,14 @@ standard fields fill instantly; ~50-60s later the tailored one-page resume PDF
 is attached and custom questions are answered. Add keywords in the card when
 the page has no JD. Review, then click the site's Submit yourself — ApplyMate
 marks the application `applied`. Check tailoring with `pnpm tailor:smoke`.
+
+Multi-step wizards (Workday, LinkedIn Easy Apply and similar): sign in
+yourself, open the application, click ⚡ once. ApplyMate fills each step (adds
+Workday work/education entries from your profile, attaches the PDF on the
+resume step, drafts custom answers in ~10s per step), presses Next / Save and
+Continue, and stops on the review page. It pauses — with the fields
+highlighted — on anything it can't fill, consent boxes, or a step the site
+rejects; fix it and click ⚡ again to continue from that step.
 The legacy manual/copy-paste instructions below predate the one-click flow.
 
 ## 1. Architecture Overview
