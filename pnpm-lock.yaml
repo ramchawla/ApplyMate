@@ -16,6 +16,10 @@ importers:
         version: 5.9.3
 
   packages/bridge:
+    dependencies:
+      yaml:
+        specifier: ^2.3.4
+        version: 2.9.0
     devDependencies:
       '@types/node':
         specifier: ^22.20.0
