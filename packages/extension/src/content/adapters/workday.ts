@@ -4,15 +4,25 @@ import { applyFill, findField, isFieldEmpty } from "../fill";
 import { isShown } from "../wizard";
 import type { Profile } from "../../types";
 
+const WORKDAY_MARKS = [
+  "[data-automation-id^='formField-']",
+  "[data-automation-id^='pageFooter']",
+  "[data-automation-id^='bottom-navigation']",
+  "[data-automation-id=applyFlowPage]",
+];
+
 export function isWorkday(doc: Document): boolean {
   return (
     /(^|\.)(myworkdayjobs|myworkdaysite|workday)\.com$/i.test(doc.location?.hostname ?? "") ||
-    !!doc.querySelector("[data-automation-id]")
+    // Workday-specific automation ids only; plenty of sites use the attribute.
+    // One query each: jsdom mis-evaluates comma lists of ^= selectors.
+    WORKDAY_MARKS.some((sel) => doc.querySelector(sel))
   );
 }
 
 type Item = Record<string, string>;
 interface SectionSpec {
+  title: string;
   heading: RegExp; // section title
   entry: RegExp; // "Work Experience 2"
   items: (p: Profile) => Item[];
@@ -21,6 +31,7 @@ interface SectionSpec {
 
 const SECTIONS: SectionSpec[] = [
   {
+    title: "Work Experience",
     heading: /^work experience$/i,
     entry: /^work experience \d+$/i,
     items: (p) => p.work.map((w) => ({ ...w })),
@@ -33,6 +44,7 @@ const SECTIONS: SectionSpec[] = [
     ],
   },
   {
+    title: "Education",
     heading: /^education$/i,
     entry: /^education \d+$/i,
     items: (p) => p.education.map((e) => ({ ...e })),
@@ -44,6 +56,7 @@ const SECTIONS: SectionSpec[] = [
     ],
   },
   {
+    title: "Website",
     heading: /^websites?$/i,
     entry: /^websites? \d+$/i,
     // LinkedIn has its own "Social Network URLs" field on Workday.
@@ -60,15 +73,22 @@ const DATE_INPUT = "[data-automation-id^=dateSection]";
 const headingsIn = (root: ParentNode, re: RegExp) =>
   deepQueryAll<HTMLElement>(root, HEADINGS).filter((h) => re.test(cleanText(h.textContent ?? "")));
 
-function addButton(section: Element): HTMLElement | undefined {
-  return deepQueryAll<HTMLElement>(section, "button, [role=button]")
-    .filter((b) => isShown(b) && (ADD_TEXT.test(cleanText(b.textContent ?? "")) || ADD_TEXT.test(b.getAttribute("aria-label") ?? "")))
-    .pop();
+// Prefers the Add whose aria-label names the section ("Add Work Experience").
+function addButton(section: Element, title = ""): HTMLElement | undefined {
+  const adds = deepQueryAll<HTMLElement>(section, "button, [role=button]").filter(
+    (b) => isShown(b) && (ADD_TEXT.test(cleanText(b.textContent ?? "")) || ADD_TEXT.test(b.getAttribute("aria-label") ?? "")),
+  );
+  const named = title && adds.find((b) => (b.getAttribute("aria-label") ?? "").toLowerCase().includes(title.toLowerCase()));
+  return named || adds.pop();
 }
 
-// The section is the nearest ancestor of its heading that holds an Add button.
-function sectionOf(heading: HTMLElement): Element | null {
-  for (let n = heading.parentElement; n; n = n.parentElement) if (addButton(n)) return n;
+// The section is the nearest ancestor of its heading that holds an Add
+// button — never one that also holds another section's heading.
+function sectionOf(heading: HTMLElement, spec: SectionSpec): Element | null {
+  for (let n = heading.parentElement; n; n = n.parentElement) {
+    if (SECTIONS.some((o) => o !== spec && headingsIn(n!, o.heading).length)) return null;
+    if (addButton(n)) return n;
+  }
   return null;
 }
 
@@ -88,7 +108,7 @@ function entriesOf(section: Element, re: RegExp): Element[] {
 async function addUntil(section: Element, spec: SectionSpec, want: number): Promise<number> {
   let added = 0;
   while (entriesOf(section, spec.entry).length < want) {
-    const btn = addButton(section);
+    const btn = addButton(section, spec.title);
     if (!btn) break;
     const before = entriesOf(section, spec.entry).length;
     press(btn);
@@ -151,9 +171,14 @@ export async function fillWorkdaySections(
   for (const spec of SECTIONS) {
     const items = spec.items(profile);
     for (const heading of headingsIn(doc, spec.heading)) {
-      const section = sectionOf(heading);
+      const section = sectionOf(heading, spec);
       if (!section) continue;
-      if (items.length) added += await addUntil(section, spec, Math.min(items.length, MAX_ENTRIES));
+      // Fields but no entry we can count: pressing Add could only duplicate.
+      const unrecognised =
+        !entriesOf(section, spec.entry).length && extractLiveFields(section, { stamp: false }).length > 0;
+      if (items.length && !unrecognised) {
+        added += await addUntil(section, spec, Math.min(items.length, MAX_ENTRIES));
+      }
       const entries = entriesOf(section, spec.entry);
       for (const [i, entry] of entries.entries()) {
         const item = items[i];
@@ -188,7 +213,8 @@ export function fillWorkdayDates(doc: Document, now = new Date()): number {
   let n = 0;
   for (const g of dateGroups(doc)) {
     const text = cleanText(g.label.replace(/^\S*\s/, ""));
-    if (!/^(today'?s )?date\b/i.test(text) && !/dateSignedOn/i.test(g.label)) continue;
+    // Exactly "Date" / "Today's Date" — never "Date of Birth" or "Date Available".
+    if (!/^(today'?s )?date\*?$/i.test(text) && !/dateSignedOn/i.test(g.label)) continue;
     n += typeDate(g.inputs, { y: String(now.getFullYear()), m: pad(now.getMonth() + 1), d: pad(now.getDate()) });
   }
   return n;

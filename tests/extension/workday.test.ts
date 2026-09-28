@@ -114,14 +114,43 @@ describe("Workday adapter", () => {
     expect(val(d, "w2-company")).toBe("");
   });
 
+  it("only markup Workday actually uses counts as Workday", () => {
+    const d = document.implementation.createHTMLDocument("t");
+    d.body.innerHTML = `<div data-automation-id="hero"><h3>Education</h3><button>Add</button></div>`;
+    expect(isWorkday(d)).toBe(false);
+  });
+
+  it("never presses another section's Add button", async () => {
+    const d = document.implementation.createHTMLDocument("t");
+    d.body.innerHTML = `<div data-automation-id="applyFlowPage">
+      <div><h3>Work Experience</h3><p>Upload a resume to add experience.</p></div>
+      <div id="edu"><h3>Education</h3><button data-automation-id="add-button">Add</button></div></div>`;
+    let eduAdds = 0;
+    d.querySelector("#edu button")!.addEventListener("click", () => {
+      eduAdds++;
+      d.getElementById("edu")!.insertAdjacentHTML("afterbegin", `<div role="group">${EDU_ENTRY(eduAdds)}</div>`);
+    });
+    await fillWorkdaySections(d, { ...profile, education: [] }, () => false);
+    expect(eduAdds).toBe(0); // no schools; the two jobs never press Education's Add
+  });
+
+  it("adds nothing to a section whose entries it can't recognise", async () => {
+    const { d, adds } = myExperience();
+    const box = d.querySelector("[data-automation-id=workExperienceSection]")!;
+    box.insertAdjacentHTML("afterbegin", `<div role="group"><h4>Job 1</h4><label for="x">Job Title</label><input id="x" value="Mine"></div>`);
+    await fillWorkdaySections(d, profile, () => false);
+    expect(adds.work).toBe(0);
+  });
+
   it("fills a self-identify Date spinner group with today, leaving other dates alone", () => {
     const d = document.implementation.createHTMLDocument("t");
     d.body.innerHTML = `<div data-automation-id="formField-dateSignedOn"><label>Date*</label>
         <input data-automation-id="dateSectionMonth-input"><input data-automation-id="dateSectionDay-input">
         <input data-automation-id="dateSectionYear-input"></div>
       ${dateGroup("availableDate", "When can you start?")}`;
+    d.body.insertAdjacentHTML("beforeend", dateGroup("dob", "Date of Birth") + dateGroup("avail", "Date Available"));
     fillWorkdayDates(d, new Date(2026, 8, 7));
-    expect(Array.from(d.querySelectorAll("input")).map((i) => i.value)).toEqual(["09", "07", "2026", "", ""]);
+    expect(Array.from(d.querySelectorAll("input")).map((i) => i.value)).toEqual(["09", "07", "2026", "", "", "", "", "", ""]);
   });
 
   it("the wizard gives entry fields to the adapter, not the instant fill", async () => {
