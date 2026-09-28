@@ -1,5 +1,4 @@
 export type {
-  ExtractedJobData,
   FormField,
   DetectionResult,
   TailorRequest,

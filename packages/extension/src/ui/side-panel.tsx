@@ -1,125 +1,178 @@
 import { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/tailwind.css";
-import { JobDataReview } from "./components/JobDataReview";
-import { FormValidation } from "./components/FormValidation";
-import { ManualEntry } from "./components/ManualEntry";
-import { TailoringReview } from "./components/TailoringReview";
-import { FormAutoFill } from "./components/FormAutoFill";
-import { ExtractedJobData, SidePanelState } from "../types";
-import { getExtractedJobData, updateExtractedJobData } from "../utils/storage";
-import { sendToBackground } from "../utils/messaging";
+import { BridgeStatus } from "./components/BridgeStatus";
+import { BridgeTokenField } from "./components/BridgeTokenField";
+import { jobKey } from "../lib/jd-cache";
+import type { RunReport } from "../types";
 
-const LOW_CONFIDENCE_THRESHOLD = 0.7;
+function useActiveTab() {
+  const [tab, setTab] = useState<chrome.tabs.Tab | null>(null);
+  useEffect(() => {
+    const load = () =>
+      chrome.tabs.query({ active: true, currentWindow: true }, ([t]) => setTab(t ?? null));
+    load();
+    chrome.tabs.onActivated.addListener(load);
+    chrome.tabs.onUpdated.addListener(load);
+    return () => {
+      chrome.tabs.onActivated.removeListener(load);
+      chrome.tabs.onUpdated.removeListener(load);
+    };
+  }, []);
+  return tab;
+}
 
 function App() {
-  const [state, setState] = useState<SidePanelState>({
-    extractedJobData: undefined,
-    currentTab: "data-review",
-    isLoading: true,
-  });
+  const tab = useActiveTab();
+  const [report, setReport] = useState<RunReport | null>(null);
+  const [jd, setJd] = useState("");
+  const [saved, setSaved] = useState(false);
+  const key = tab?.url ? jobKey(tab.url) : "";
 
   useEffect(() => {
-    // Ask the content script to re-extract now that the side panel is open and
-    // the page DOM has settled (SPA forms rendered). Result lands in session
-    // storage and is picked up by the poll below.
-    void sendToBackground({ type: "REQUEST_REEXTRACT" });
-    void loadExtractedData();
-    const interval = setInterval(() => void loadExtractedData(), 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function loadExtractedData() {
-    const data = await getExtractedJobData();
-    setState((prev) => {
-      if (data && data.id !== prev.extractedJobData?.id) {
-        return { ...prev, extractedJobData: data, isLoading: false };
-      }
-      if (prev.isLoading) {
-        return { ...prev, isLoading: false };
-      }
-      return prev;
-    });
-  }
-
-  async function acceptManualData(data: ExtractedJobData) {
-    await updateExtractedJobData(data);
-    setState((prev) => ({
-      ...prev,
-      extractedJobData: data,
-      currentTab: "data-review",
-    }));
-  }
-
-  if (state.isLoading) {
-    return <div className="p-4">Loading…</div>;
-  }
-
-  const data = state.extractedJobData;
-
-  // No data, or low-confidence detection not yet confirmed by the user →
-  // fall back to manual entry (pre-filled when partial data exists).
-  if (!data || data.boardConfidence < LOW_CONFIDENCE_THRESHOLD) {
-    return (
-      <div className="w-80 max-h-screen overflow-y-auto bg-white">
-        <ManualEntry initial={data} onSubmit={acceptManualData} />
-      </div>
+    if (tab?.id === undefined) return;
+    const storageKey = `lastRun:${tab.id}`;
+    chrome.storage.session.get(storageKey, (r) =>
+      setReport((r[storageKey] as RunReport) ?? null),
     );
+    const onChange = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (changes[storageKey]) setReport(changes[storageKey].newValue as RunReport);
+    };
+    chrome.storage.session.onChanged.addListener(onChange);
+    return () => chrome.storage.session.onChanged.removeListener(onChange);
+  }, [tab?.id]);
+
+  useEffect(() => {
+    chrome.storage.local.get("jdOverrides", (r) =>
+      setJd(((r.jdOverrides ?? {}) as Record<string, string>)[key] ?? ""),
+    );
+    setSaved(false);
+  }, [key]);
+
+  async function saveJd(text: string) {
+    const r = await chrome.storage.local.get("jdOverrides");
+    const overrides = { ...((r.jdOverrides ?? {}) as Record<string, string>) };
+    if (text.trim()) overrides[key] = text.trim();
+    else delete overrides[key];
+    await chrome.storage.local.set({ jdOverrides: overrides });
+    setSaved(true);
   }
 
+  const res = report?.result;
   return (
-    <div className="w-80 max-h-screen overflow-y-auto bg-white">
-      {state.currentTab === "data-review" && (
-        <JobDataReview
-          data={data}
-          onNext={() =>
-            setState((prev) => ({ ...prev, currentTab: "form-validation" }))
-          }
-        />
+    <div className="p-3 space-y-4 text-sm bg-white min-h-screen">
+      <div className="flex items-center justify-between">
+        <h1 className="font-bold text-base">⚡ ApplyMate</h1>
+        <BridgeStatus />
+      </div>
+
+      {!report && (
+        <p className="text-gray-500 text-xs">
+          Click ⚡ Autofill &amp; Tailor on an application page. The run's details show up here.
+        </p>
       )}
 
-      {state.currentTab === "form-validation" && (
-        <FormValidation
-          fields={data.formFields}
-          onProceed={(validatedFields) => {
-            // Keep the user's per-field type corrections — the fill plan is
-            // built from these, so dropping them would undo the validation.
-            const updated = { ...data, formFields: validatedFields };
-            void updateExtractedJobData(updated);
-            setState((prev) => ({
-              ...prev,
-              extractedJobData: updated,
-              currentTab: "tailoring-review",
-            }));
+      {report && (
+        <section className="space-y-2">
+          <h2 className="font-semibold">
+            {[report.title, report.company].filter(Boolean).join(" · ") || "Last run"}
+          </h2>
+          <p className="text-xs text-gray-600">
+            JD: {report.jdSource} · {report.filled} fields filled instantly
+            {report.needsYou.length
+              ? ` · ${report.needsYou.length} required fields need you`
+              : ""}
+          </p>
+          {report.error && <p className="text-xs text-red-700">{report.error}</p>}
+          {res && (
+            <>
+              <p className="text-xs">
+                📄 {res.fileName} · {res.pages} page · saved to <code>{res.savedTo}</code>
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {res.keywords.injected.map((k) => (
+                  <span
+                    key={`i-${k.keyword}`}
+                    className="bg-green-100 text-green-800 rounded px-1.5 text-xs"
+                    title={k.where}
+                  >
+                    ✓ {k.keyword}
+                  </span>
+                ))}
+                {res.keywords.skipped.map((k) => (
+                  <span
+                    key={`s-${k.keyword}`}
+                    className="bg-gray-100 text-gray-600 rounded px-1.5 text-xs"
+                    title={k.reason}
+                  >
+                    ✗ {k.keyword}
+                  </span>
+                ))}
+              </div>
+              {res.warnings.length > 0 && (
+                <ul className="text-xs text-amber-700 list-disc ml-4">
+                  {res.warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              )}
+              <details>
+                <summary className="cursor-pointer text-xs font-medium">
+                  Bullet changes ({res.edits.length})
+                </summary>
+                {res.edits.map((e) => (
+                  <div key={e.id} className="border rounded p-2 my-1 text-xs space-y-1">
+                    <div className="text-gray-400">
+                      {e.id}
+                      {e.reverted ? ` — reverted: ${e.reverted}` : ""}
+                    </div>
+                    <div className="line-through text-gray-400">{e.before}</div>
+                    <div>{e.after}</div>
+                  </div>
+                ))}
+              </details>
+              <details>
+                <summary className="cursor-pointer text-xs font-medium">Cover letter</summary>
+                <textarea
+                  readOnly
+                  value={res.coverLetter}
+                  className="w-full border rounded p-1 h-40 text-xs"
+                />
+              </details>
+            </>
+          )}
+        </section>
+      )}
+
+      <section className="space-y-1">
+        <h2 className="font-semibold text-xs">Paste JD for this page</h2>
+        <p className="text-xs text-gray-500">Overrides the auto-detected JD for this job.</p>
+        <textarea
+          value={jd}
+          onChange={(e) => {
+            setJd(e.target.value);
+            setSaved(false);
           }}
+          className="w-full border rounded p-1 h-24 text-xs"
+          placeholder="Paste the job description…"
         />
-      )}
-      {state.currentTab === "tailoring-review" && (
-        <TailoringReview
-          jobData={data}
-          onProceed={(output) =>
-            setState((prev) => ({
-              ...prev,
-              approvedOutput: {
-                coverLetter: output.coverLetter,
-                formFieldGuidance: output.formFieldGuidance ?? [],
-              },
-              currentTab: "form-auto-fill",
-            }))
-          }
-        />
-      )}
-      {state.currentTab === "form-auto-fill" && state.approvedOutput && (
-        <FormAutoFill
-          fields={data.formFields}
-          output={state.approvedOutput}
-        />
-      )}
+        <button
+          onClick={() => void saveJd(jd)}
+          disabled={!key}
+          className="bg-gray-800 text-white rounded px-2 py-1 text-xs"
+        >
+          {saved ? "Saved ✓" : "Save JD"}
+        </button>
+      </section>
+
+      <details>
+        <summary className="cursor-pointer text-xs text-gray-500">
+          Bridge pairing (automatic; manual fallback)
+        </summary>
+        <BridgeTokenField />
+      </details>
     </div>
   );
 }
 
-ReactDOM.createRoot(
-  document.getElementById("app") || document.body,
-).render(<App />);
+ReactDOM.createRoot(document.getElementById("app") || document.body).render(<App />);
