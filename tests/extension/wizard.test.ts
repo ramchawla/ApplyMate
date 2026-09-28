@@ -56,6 +56,14 @@ describe("step change + errors", () => {
     expect(await waitForStepChange(d, stepSignature(d), 150)).toBe(false);
   });
 
+  it("a cookie/consent dialog never captures the scope", () => {
+    const d = page(`<label for="a">First Name</label><input id="a"><button>Submit application</button>
+      <div role="dialog" aria-label="Cookie consent"><input type="checkbox" id="c"><button>Accept all</button></div>
+      <div role="dialog" aria-label="Notice"><button>Next</button></div>`);
+    expect(activeScope(d)).toBe(d);
+    expect(findStepButton(d)).toMatchObject({ kind: "submit" });
+  });
+
   it("sees a step that re-rendered synchronously inside the press", async () => {
     const d = page(`<h2>My Information</h2><label for="a">First Name</label><input id="a">`);
     const before = stepSignature(d);

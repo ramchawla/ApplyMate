@@ -21,10 +21,24 @@ export function isShown(el: HTMLElement): boolean {
   return true;
 }
 
-// The open application dialog (LinkedIn Easy Apply modal) if any, else the page.
+// A dialog's accessible name plus its first heading.
+export function dialogName(dlg: Element): string {
+  const root = dlg.getRootNode() as Document | ShadowRoot;
+  const labelled = (dlg.getAttribute("aria-labelledby") ?? "")
+    .split(/\s+/)
+    .map((id) => (id && root.getElementById?.(id)?.textContent) || "");
+  const heading = dlg.querySelector("h1, h2, h3")?.textContent ?? "";
+  return cleanText([dlg.getAttribute("aria-label") ?? "", ...labelled, heading].join(" "));
+}
+
+// The open application dialog (LinkedIn Easy Apply modal) if any, else the
+// page. Cookie/consent dialogs and button-only notices never count.
 export function activeScope(doc: Document): ParentNode {
   const dialogs = deepQueryAll<HTMLElement>(doc, "[role=dialog], dialog[open]").filter(
-    (d) => isShown(d) && d.querySelector("input, textarea, select, button"),
+    (d) =>
+      isShown(d) &&
+      d.querySelector("input, textarea, select") &&
+      !/cookie|consent|privacy/i.test(dialogName(d)),
   );
   return dialogs[dialogs.length - 1] ?? doc;
 }

@@ -5,7 +5,7 @@ import { applyFill, attachFile, findField, highlightEmptyRequired } from "./fill
 import { mountWidget, type WidgetState } from "./widget";
 import { FIELD_ATTR, press, sleep } from "./dom";
 import { fillWorkdayDates, fillWorkdaySections, isWorkday } from "./adapters/workday";
-import { activeScope, findStepButton, stepSignature, visibleErrors, waitForStepChange } from "./wizard";
+import { activeScope, dialogName, findStepButton, stepSignature, visibleErrors, waitForStepChange } from "./wizard";
 import { buildInstantPlan } from "../lib/field-mapping";
 import { normalizeProfile } from "../utils/profile";
 import { pickJD, rememberJD, type CachedJD, type PageJD } from "../lib/jd-cache";
@@ -21,6 +21,13 @@ export function isApplicationForm(fields: FormField[], jobKnown: boolean): boole
 }
 
 const SUBMIT_TEXT = /^(submit( my)?( application)?|send application|apply|apply now|finish)$/i;
+
+// LinkedIn Easy Apply and similar: an open apply modal is the form.
+export function isApplicationDialogOpen(doc: Document): boolean {
+  const scope = activeScope(doc);
+  if (!(scope instanceof Element)) return false;
+  return /\bappl(y|ication)\b/i.test(dialogName(scope)) || /jobs-easy-apply/.test(scope.className);
+}
 
 export function isSubmitControl(el: Element): boolean {
   const btn = el.closest("button, input[type=submit], [role=button]") as HTMLElement | null;
@@ -105,6 +112,11 @@ const scopeRoot = (doc: Document) => {
   const scope = activeScope(doc);
   return scope instanceof Document ? scope : (scope as Element);
 };
+
+// The fields of the current form: inside an open application dialog if
+// there is one (never the page's own search boxes), else the page.
+export const scanForm = (doc: Document, opts?: { stamp?: boolean }) =>
+  extractLiveFields(scopeRoot(doc), opts);
 
 const toQuestion = (f: FormField) => ({
   fieldId: f.id,
@@ -427,9 +439,11 @@ async function main(): Promise<void> {
         await storageSet({ jdCache: rememberJD(cache, page, Date.now()) });
       }
     }
-    fields = extractLiveFields(document, { stamp: false });
+    fields = scanForm(document, { stamp: false });
     const { jd, source } = await currentJD();
-    const isForm = isApplicationForm(fields, posting || (source !== "none" && source !== "recent"));
+    const isForm =
+      isApplicationDialogOpen(document) ||
+      isApplicationForm(fields, posting || (source !== "none" && source !== "recent"));
     if (!isForm && !posting) return;
     Object.assign(ui, {
       mode: isForm ? "form" : "posting",
@@ -446,7 +460,7 @@ async function main(): Promise<void> {
       if (ui.busy) return;
       Object.assign(ui, { busy: true, lines: [], injected: [], skipped: [], canOpenPdf: false });
       widget?.render(ui);
-      fields = extractLiveFields(document);
+      fields = scanForm(document);
       const { jd, source } = await currentJD();
       ranFill = true;
       let report: RunReport;
