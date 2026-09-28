@@ -78,21 +78,28 @@ function base64ToFile(b64: string, name: string): File {
   return new File([bytes], name, { type: "application/pdf" });
 }
 
+const CHOICE_CONTROL =
+  "[aria-haspopup], [role=combobox], [role=radio], [role=checkbox], [aria-pressed], [role=option], input[type=radio], input[type=checkbox], select";
+
 export function trackUserEdits(
   doc: Document,
   touched: Set<string>,
   isUserEvent: (e: Event) => boolean,
 ): () => void {
   const onEdit = (e: Event) => {
-    if (!isUserEvent(e) || !(e.target instanceof Element)) return;
-    const id = e.target.closest(`[${FIELD_ATTR}]`)?.getAttribute(FIELD_ATTR);
+    // composedPath: inside open shadow roots e.target is only the host.
+    const target = e.composedPath?.()[0] ?? e.target;
+    if (!isUserEvent(e) || !(target instanceof Element)) return;
+    // Dropdown buttons, radios, toggles fire no input on the stamped node:
+    // the user's click on them is the edit. A click into a text box isn't.
+    if (e.type === "click" && !target.closest(CHOICE_CONTROL)) return;
+    const id = target.closest(`[${FIELD_ATTR}]`)?.getAttribute(FIELD_ATTR);
     if (id) touched.add(id);
   };
-  doc.addEventListener("input", onEdit, true);
-  doc.addEventListener("change", onEdit, true);
+  const types = ["input", "change", "click"];
+  for (const t of types) doc.addEventListener(t, onEdit, true);
   return () => {
-    doc.removeEventListener("input", onEdit, true);
-    doc.removeEventListener("change", onEdit, true);
+    for (const t of types) doc.removeEventListener(t, onEdit, true);
   };
 }
 

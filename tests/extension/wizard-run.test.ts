@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { runOneClick } from "../../packages/extension/src/content/content";
+import { runOneClick, trackUserEdits } from "../../packages/extension/src/content/content";
 import { extractLiveFields } from "../../packages/extension/src/content/extractors/form";
 import { normalizeProfile } from "../../packages/extension/src/utils/profile";
 
@@ -252,5 +252,21 @@ describe("wizard engine", () => {
     expect(report.stoppedAt).toBe("sign-in");
     expect(log.nextPresses).toBe(1);
     expect((d.getElementById("em2") as HTMLInputElement).value).toBe("");
+  });
+});
+
+describe("user edit tracking", () => {
+  it("counts a dropdown pick and a shadow-DOM edit, not a mere click into a text box", () => {
+    const d = document.implementation.createHTMLDocument("t");
+    d.body.innerHTML = `<button data-applymate-id="country" aria-haspopup="listbox">Canada</button>
+      <input data-applymate-id="city"><div id="host"></div>`;
+    const shadow = d.getElementById("host")!.attachShadow({ mode: "open" });
+    shadow.innerHTML = `<textarea data-applymate-id="why"></textarea>`;
+    const touched = new Set<string>();
+    trackUserEdits(d, touched, () => true);
+    d.querySelector("[aria-haspopup]")!.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    d.querySelector("input")!.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    shadow.querySelector("textarea")!.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    expect([...touched].sort()).toEqual(["country", "why"]);
   });
 });
