@@ -72,3 +72,57 @@ export interface ExtractedJobData {
   userValidated: boolean;
   userNotes?: string;
 }
+
+// ---- One-click tailoring (extension ⇄ bridge) ----
+
+export interface TailorQuestion {
+  fieldId: string;
+  label: string;
+  type: string;
+  options?: string[];
+  required: boolean;
+}
+
+export interface TailorRequest {
+  job: { title: string; company: string; url: string; description: string };
+  keywords: string[];
+  fields: TailorQuestion[];
+  wantCoverLetterPdf: boolean;
+}
+
+export interface KeywordReport {
+  injected: { keyword: string; where: string }[];
+  skipped: { keyword: string; reason: string }[];
+}
+
+export interface EditRecord {
+  id: string;
+  before: string;
+  after: string;
+  reverted?: string;
+}
+
+export interface TailorResult {
+  applicationId: string;
+  fileName: string;
+  coverLetter: string;
+  hasCoverLetterPdf: boolean;
+  answers: { fieldId: string; value: string }[];
+  keywords: KeywordReport;
+  edits: EditRecord[];
+  warnings: string[];
+  pages: number;
+  savedTo: string;
+}
+
+export interface RunReport {
+  url: string;
+  title: string;
+  company: string;
+  jdSource: string;
+  filled: number;
+  needsYou: string[];
+  result?: TailorResult;
+  error?: string;
+  at: number;
+}
