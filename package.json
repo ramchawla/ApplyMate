@@ -17,6 +17,10 @@
     "skill:db:up": "pnpm --filter @applymate/skill db:up",
     "skill:db:down": "pnpm --filter @applymate/skill db:down",
     "bridge": "pnpm --filter @applymate/bridge start",
+    "bridge:install": "pnpm --filter @applymate/bridge install-agent",
+    "bridge:unpair": "pnpm --filter @applymate/bridge unpair",
+    "profile:init": "pnpm --filter @applymate/bridge profile-init",
+    "tailor:smoke": "pnpm --filter @applymate/bridge smoke",
     "test:bridge": "pnpm --filter @applymate/bridge test",
     "type-check:bridge": "pnpm --filter @applymate/bridge type-check"
   },

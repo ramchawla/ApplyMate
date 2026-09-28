@@ -5,7 +5,11 @@
   "scripts": {
     "start": "tsx src/start.ts",
     "test": "vitest run",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "install-agent": "tsx src/install-launchd.ts",
+    "profile-init": "tsx src/profile-init.ts",
+    "smoke": "tsx src/smoke.ts",
+    "unpair": "node -e \"require('fs').rmSync(require('os').homedir()+'/.applymate/paired-extension',{force:true})\""
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
