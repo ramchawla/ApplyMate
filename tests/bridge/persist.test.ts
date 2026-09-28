@@ -55,3 +55,46 @@ describe("persistOutput", () => {
     expect(versions.map((v) => v.versionNumber).sort()).toEqual([1, 2]);
   });
 });
+
+import { mkdtempSync, readFileSync, existsSync } from "node:fs";
+import {
+  applicationDirName,
+  saveApplicationFiles,
+  markApplied,
+  deterministicAppId,
+} from "../../packages/bridge/src/persist";
+
+describe("application files + status", () => {
+  it("names app dirs by date, company and role", () => {
+    expect(
+      applicationDirName(new Date("2026-09-28T12:00:00Z"), "Acme, Inc.", "Senior SWE (Platform)"),
+    ).toBe("2026-09-28-acme-inc-senior-swe-platform");
+    expect(applicationDirName(new Date("2026-09-28T12:00:00Z"), "", "")).toBe(
+      "2026-09-28-company-role",
+    );
+  });
+
+  it("saves resume, cover letter, report and JD", async () => {
+    const dir = join(mkdtempSync(join(tmpdir(), "am-app-")), "x");
+    await saveApplicationFiles(dir, {
+      resumeTex: "\\tex",
+      resumePdf: Buffer.from("%PDF"),
+      coverLetter: "Dear",
+      report: { a: 1 },
+      jd: "JD",
+    });
+    expect(readFileSync(join(dir, "resume.tex"), "utf8")).toBe("\\tex");
+    expect(existsSync(join(dir, "resume.pdf"))).toBe(true);
+    expect(readFileSync(join(dir, "cover-letter.md"), "utf8")).toBe("Dear");
+    expect(JSON.parse(readFileSync(join(dir, "report.json"), "utf8"))).toEqual({ a: 1 });
+    expect(readFileSync(join(dir, "jd.md"), "utf8")).toBe("JD");
+  });
+
+  it("marks an application applied, creating it if needed", () => {
+    const id = markApplied(db, { jobUrl: "https://x.com/j2", company: "Acme", jobTitle: "SRE" });
+    expect(id).toBe(deterministicAppId("https://x.com/j2"));
+    const row = listApplications(db).find((a) => a.id === id)!;
+    expect(row.status).toBe("applied");
+    expect(row.company).toBe("Acme");
+  });
+});
