@@ -5,7 +5,7 @@ import {
   LONG_LABEL_TYPES,
   SHORT_LABEL_MAX,
 } from "../../../../../lib/shared/constants";
-import { FIELD_ATTR, cleanText, cssEscape, toggleButtons } from "../dom";
+import { FIELD_ATTR, cleanText, cssEscape, deepQueryAll, rootOf, toggleButtons } from "../dom";
 
 // Required markers (* or Lever's ✱) end the question; ATSs append helper
 // text after them ("Current location ✱No location found…").
@@ -54,17 +54,17 @@ export function inferValueType(
 
 // Text of the elements named by an id-list attribute (aria-labelledby,
 // aria-describedby).
-function textOfIds(ids: string | null, doc: Document): string {
+function textOfIds(ids: string | null, root: Document | ShadowRoot): string {
   if (!ids) return "";
   return ids
     .split(/\s+/)
-    .map((id) => doc.getElementById(id)?.textContent ?? "")
+    .map((id) => root.getElementById(id)?.textContent ?? "")
     .join(" ")
     .trim();
 }
 
-function labelledBy(el: Element, doc: Document): string {
-  return textOfIds(el.getAttribute("aria-labelledby"), doc);
+function labelledBy(el: Element): string {
+  return textOfIds(el.getAttribute("aria-labelledby"), rootOf(el));
 }
 
 // Closest label-like element that precedes `el`, isn't its container, and
@@ -85,14 +85,15 @@ function questionText(el: Element, exclude: (c: Element) => boolean): string {
   return "";
 }
 
-function rawLabel(el: HTMLElement, doc: Document): string {
+function rawLabel(el: HTMLElement): string {
+  const root = rootOf(el);
   if (el.id) {
-    const l = doc.querySelector(`label[for="${cssEscape(el.id)}"]`);
+    const l = root.querySelector(`label[for="${cssEscape(el.id)}"]`);
     if (l?.textContent?.trim()) return l.textContent;
   }
   const wrap = el.closest("label");
   if (wrap?.textContent?.trim()) return wrap.textContent;
-  const byIds = labelledBy(el, doc);
+  const byIds = labelledBy(el);
   if (byIds) return byIds;
   const aria = el.getAttribute("aria-label");
   if (aria?.trim()) return aria;
@@ -102,32 +103,33 @@ function rawLabel(el: HTMLElement, doc: Document): string {
     const f = c.getAttribute("for");
     // A label bound to a different, existing control isn't ours. A dangling
     // for= (Ashby omits the input id) still labels this field.
-    return c.tagName === "LABEL" && !!f && f !== el.id && !!doc.getElementById(f);
+    return c.tagName === "LABEL" && !!f && f !== el.id && !!root.getElementById(f);
   });
   return q || el.getAttribute("placeholder") || el.getAttribute("name") || "";
 }
 
-function groupRawLabel(first: HTMLElement, doc: Document): string {
+function groupRawLabel(first: HTMLElement): string {
+  const root = rootOf(first);
   const legend = first.closest("fieldset")?.querySelector("legend");
   if (legend?.textContent?.trim()) return legend.textContent;
   // Only the group's own container: a page-level tabpanel's aria-labelledby
   // ("Application") would otherwise label every group on the form.
   const container = first.closest("fieldset, [role=radiogroup]");
-  const byIds = container ? labelledBy(container, doc) : "";
+  const byIds = container ? labelledBy(container) : "";
   if (byIds) return byIds;
   // Skip option labels (wrapping or pointing at a radio/checkbox); keep the
   // question label even when it has a for= (Ashby: fieldset > label[for]).
   return questionText(first, (c) => {
     if (c.querySelector("input[type=radio], input[type=checkbox]")) return true;
     const f = c.getAttribute("for");
-    const target = f ? doc.getElementById(f) : null;
+    const target = f ? root.getElementById(f) : null;
     return c.tagName === "LABEL" && target instanceof HTMLInputElement && /radio|checkbox/.test(target.type);
   });
 }
 
-function optionLabel(input: HTMLInputElement, doc: Document): string {
+function optionLabel(input: HTMLInputElement): string {
   if (input.id) {
-    const l = doc.querySelector(`label[for="${cssEscape(input.id)}"]`);
+    const l = rootOf(input).querySelector(`label[for="${cssEscape(input.id)}"]`);
     if (l?.textContent?.trim()) return cleanText(l.textContent);
   }
   return cleanText(input.closest("label")?.textContent ?? input.value);
@@ -166,17 +168,20 @@ function uniqueId(base: string, used: Set<string>): string {
 
 // stamp=false scans without mutating the page — used for passive gating so
 // React/Remix hydration never sees foreign attributes. The fill pass stamps.
+// Page-lifetime counter: anonymous ids stay unique across repeated and
+// scoped scans (Workday entries added later get fresh ids).
+let anonSeq = 0;
+const nextAnon = () => `am-${anonSeq++}`;
+
 export function extractLiveFields(
-  doc: Document,
+  root: Document | Element,
   { stamp = true }: { stamp?: boolean } = {},
 ): FormField[] {
   const fields: FormField[] = [];
   const used = new Set<string>();
   const seenGroups = new Set<string>();
-  let anon = 0;
-  const nextAnon = () => `am-${anon++}`;
 
-  for (const el of Array.from(doc.querySelectorAll<HTMLElement>("input, textarea, select"))) {
+  for (const el of deepQueryAll<HTMLElement>(root, "input, textarea, select")) {
     const tag = el.tagName.toLowerCase();
     const htmlType = (el.getAttribute("type") ?? "").toLowerCase();
     if (tag === "input" && SKIP_TYPES.has(htmlType)) continue;
@@ -190,7 +195,7 @@ export function extractLiveFields(
     const groupInputs =
       (htmlType === "radio" || htmlType === "checkbox") && input.name
         ? Array.from(
-            doc.querySelectorAll<HTMLInputElement>(
+            rootOf(el).querySelectorAll<HTMLInputElement>(
               `input[type=${htmlType}][name="${cssEscape(input.name)}"]`,
             ),
           )
@@ -222,7 +227,7 @@ export function extractLiveFields(
               ? (htmlType as FormField["type"])
               : "text";
 
-    const raw = isGroup ? groupRawLabel(el, doc) : rawLabel(el, doc);
+    const raw = isGroup ? groupRawLabel(el) : rawLabel(el);
     const label = labelText(raw);
     const options =
       tag === "select"
@@ -230,7 +235,7 @@ export function extractLiveFields(
             .map((o) => cleanText(o.text))
             .filter((t) => t && !/^(select|please select|choose|--)/i.test(t))
         : isGroup
-          ? groupInputs.map((r) => optionLabel(r, doc))
+          ? groupInputs.map((r) => optionLabel(r))
           : undefined;
     const { valueType, confidence } = inferValueType(
       label,
@@ -239,7 +244,7 @@ export function extractLiveFields(
       type,
     );
 
-    const description = cleanText(textOfIds(el.getAttribute("aria-describedby"), doc));
+    const description = cleanText(textOfIds(el.getAttribute("aria-describedby"), rootOf(el)));
     fields.push({
       id,
       label,
@@ -259,14 +264,14 @@ export function extractLiveFields(
   }
 
   // Non-native choice groups (custom radio widgets).
-  for (const group of Array.from(doc.querySelectorAll<HTMLElement>("[role=radiogroup]"))) {
+  for (const group of deepQueryAll<HTMLElement>(root, "[role=radiogroup]")) {
     if (group.querySelector("input")) continue;
     const radios = Array.from(group.querySelectorAll<HTMLElement>("[role=radio]"));
     if (radios.length === 0) continue;
     const id = uniqueId(group.getAttribute(FIELD_ATTR) ?? nextAnon(), used);
     if (stamp) group.setAttribute(FIELD_ATTR, id);
     const raw =
-      group.getAttribute("aria-label") || labelledBy(group, doc) || questionText(group, () => false);
+      group.getAttribute("aria-label") || labelledBy(group) || questionText(group, () => false);
     const label = cleanText(raw);
     const { valueType, confidence } = inferValueType(label, "radio", "", "radio");
     fields.push({
@@ -283,7 +288,7 @@ export function extractLiveFields(
 
   // Toggle-button questions (Ashby "Yes" / "No").
   const seenGroupsEl = new Set<Element>();
-  for (const btn of Array.from(doc.querySelectorAll<HTMLElement>("button[aria-pressed], button[data-option]"))) {
+  for (const btn of deepQueryAll<HTMLElement>(root, "button[aria-pressed], button[data-option]")) {
     const group = btn.parentElement;
     if (!group || seenGroupsEl.has(group)) continue;
     seenGroupsEl.add(group);
@@ -291,7 +296,7 @@ export function extractLiveFields(
     if (!buttons.length) continue;
     const id = uniqueId(group.getAttribute(FIELD_ATTR) ?? nextAnon(), used);
     if (stamp) group.setAttribute(FIELD_ATTR, id);
-    const raw = labelledBy(group, doc) || questionText(group, () => false);
+    const raw = labelledBy(group) || questionText(group, () => false);
     const label = labelText(raw);
     const { valueType, confidence } = inferValueType(label, "radio", "", "radio");
     fields.push({

@@ -8,6 +8,8 @@ import {
   setNativeValue,
   toggleButtons,
   typeInto,
+  deepQueryAll,
+  rootOf,
 } from "./dom";
 
 export interface FillInstruction {
@@ -22,7 +24,7 @@ export interface FillResult {
 
 export function findField(doc: Document, fieldId: string): HTMLElement | null {
   return (
-    doc.querySelector<HTMLElement>(`[${FIELD_ATTR}="${cssEscape(fieldId)}"]`) ??
+    deepQueryAll<HTMLElement>(doc, `[${FIELD_ATTR}="${cssEscape(fieldId)}"]`)[0] ??
     doc.getElementById(fieldId) ??
     doc.querySelector<HTMLElement>(`[name="${cssEscape(fieldId)}"]`)
   );
@@ -71,7 +73,7 @@ const textOf = (el: Element) =>
 
 function labelOf(input: HTMLInputElement): string {
   if (input.id) {
-    const l = input.ownerDocument.querySelector(`label[for="${cssEscape(input.id)}"]`);
+    const l = rootOf(input).querySelector(`label[for="${cssEscape(input.id)}"]`);
     if (l?.textContent) return l.textContent.trim();
   }
   return (input.closest("label")?.textContent ?? input.value).trim();
@@ -105,7 +107,7 @@ function fillSelect(el: HTMLSelectElement, value: string): boolean {
 function group(el: HTMLInputElement): HTMLInputElement[] {
   return el.name
     ? Array.from(
-        el.ownerDocument.querySelectorAll<HTMLInputElement>(
+        rootOf(el).querySelectorAll<HTMLInputElement>(
           `input[type=${el.type}][name="${cssEscape(el.name)}"]`,
         ),
       )
@@ -154,31 +156,31 @@ const SUGGEST_CONTAINER = "[role=listbox], [class*='dropdown'], [class*='autocom
 
 // Options that belong to this combobox — never another widget's open menu
 // (e.g. the phone-country picker left open beside a react-select).
-function scopedOptions(input: HTMLInputElement): HTMLElement[] {
+function scopedOptions(input: HTMLElement): HTMLElement[] {
   const doc = input.ownerDocument;
+  const root = rootOf(input);
+  const byId = (id: string) => root.getElementById(id) ?? doc.getElementById(id);
   const owned = (input.getAttribute("aria-controls") ?? input.getAttribute("aria-owns") ?? "")
     .split(/\s+/)
-    .map((id) => (id ? doc.getElementById(id) : null))
+    .map((id) => (id ? byId(id) : null))
     .filter((el): el is HTMLElement => !!el);
-  if (owned.length) return owned.flatMap((el) => Array.from(el.querySelectorAll<HTMLElement>(OPTION_SELECTOR)));
+  if (owned.length) return owned.flatMap((el) => deepQueryAll<HTMLElement>(el, OPTION_SELECTOR));
   if (input.id) {
-    const rs = Array.from(
-      doc.querySelectorAll<HTMLElement>(`[id^="react-select-${cssEscape(input.id)}-option"]`),
-    );
+    const rs = deepQueryAll<HTMLElement>(doc, `[id^="react-select-${cssEscape(input.id)}-option"]`);
     if (rs.length) return rs;
   }
-  const foreign = Array.from(doc.querySelectorAll<HTMLElement>("[role=combobox][aria-controls]"))
+  const foreign = deepQueryAll<HTMLElement>(doc, "[role=combobox][aria-controls]")
     .filter((other) => other !== input)
-    .map((other) => doc.getElementById(other.getAttribute("aria-controls")!))
+    .map((other) => rootOf(other).getElementById(other.getAttribute("aria-controls")!))
     .filter((el): el is HTMLElement => !!el);
-  return Array.from(doc.querySelectorAll<HTMLElement>(OPTION_SELECTOR)).filter(
+  return deepQueryAll<HTMLElement>(doc, OPTION_SELECTOR).filter(
     (o) =>
       !foreign.some((f) => f.contains(o)) &&
       !/^react-select-.+-option/.test(o.id), // another react-select's option
   );
 }
 
-function findOption(input: HTMLInputElement, value: string): HTMLElement | null {
+function findOption(input: HTMLElement, value: string): HTMLElement | null {
   const options = scopedOptions(input);
   const i = matchOption(options.map(textOf), value);
   return i === -1 ? null : options[i];
@@ -187,7 +189,7 @@ function findOption(input: HTMLInputElement, value: string): HTMLElement | null 
 // Resolves the moment a matching option is rendered. Driven by DOM mutations,
 // not polling: Chrome throttles timers in background tabs, observers aren't.
 function waitForMatch(
-  input: HTMLInputElement,
+  input: HTMLElement,
   value: string,
   ms: number,
 ): Promise<HTMLElement | null> {

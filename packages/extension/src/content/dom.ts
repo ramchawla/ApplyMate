@@ -1,5 +1,25 @@
 export const FIELD_ATTR = "data-applymate-id";
 
+// All matches under root, descending into every open shadow root (custom
+// career sites and SmartRecruiters render forms in web components).
+export function deepQueryAll<T extends Element = HTMLElement>(root: ParentNode, selector: string): T[] {
+  const out: T[] = [];
+  const visit = (node: ParentNode) => {
+    out.push(...Array.from(node.querySelectorAll<T>(selector)));
+    for (const el of Array.from(node.querySelectorAll("*"))) {
+      if (el.shadowRoot) visit(el.shadowRoot);
+    }
+  };
+  visit(root);
+  return out;
+}
+
+// Document or shadow root that owns el — where its label[for] / ids live.
+export function rootOf(el: Element): Document | ShadowRoot {
+  const r = el.getRootNode();
+  return r instanceof ShadowRoot ? r : el.ownerDocument;
+}
+
 export function cssEscape(value: string): string {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(value);
   return value.replace(/["\\\]]/g, "\\$&");

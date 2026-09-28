@@ -88,12 +88,12 @@ describe("applyFill", () => {
     const d = doc(
       `<div role="radiogroup" aria-label="Sponsor?"><div role="radio">Yes</div><div role="radio">No</div></div>`,
     );
-    extractLiveFields(d);
+    const [rg] = extractLiveFields(d);
     const clicked: string[] = [];
     d.querySelectorAll("[role=radio]").forEach((r) =>
       r.addEventListener("click", () => clicked.push(r.textContent!)),
     );
-    await applyFill([{ fieldId: "am-0", value: "No" }], d);
+    await applyFill([{ fieldId: rg.id, value: "No" }], d);
     expect(clicked).toEqual(["No"]);
   });
 
