@@ -7,3 +7,6 @@ build/
 .vscode/
 .idea/
 .superpowers/
+
+# Playwright MCP logs/screenshots/scratch (may hold local tokens)
+.playwright-mcp/

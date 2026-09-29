@@ -137,6 +137,7 @@ const toQuestion = (f: FormField) => ({
 // holds a value (site prefill, adapter dates, an earlier run). react-select
 // inputs keep their value elsewhere, so they're always asked.
 function askable(doc: Document, f: FormField): boolean {
+  if (!f.label.trim()) return false; // nothing for Claude to answer
   if (f.type === "checkbox" && (f.options?.length ?? 0) < 2) return false;
   const el = findField(doc, f.id);
   return !el || el.getAttribute("role") === "combobox" || isFieldEmpty(el);

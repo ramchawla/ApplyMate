@@ -242,6 +242,13 @@ describe("wizard engine", () => {
     expect(log.nextPresses).toBe(0);
   });
 
+  it("never asks Claude about a field with no label", async () => {
+    const { d } = wizard([`<input id="mystery"><label for="why">Why Acme?</label><textarea id="why"></textarea><button>Next</button>`, STEP_REVIEW]);
+    const { sent, send } = bridge([{ fieldId: "why", value: "Platforms." }]);
+    await run(d, send);
+    expect(sent.find((m) => m.type === "ANSWER_START").request.fields.map((f: any) => f.fieldId)).toEqual(["why"]);
+  });
+
   it("stops at a sign-in step without filling or pressing anything there", async () => {
     const { d, log } = wizard([
       STEP_INFO,

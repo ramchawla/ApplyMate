@@ -206,6 +206,21 @@ describe("inferValueType", () => {
     expect(t("Field 1", "text", "given-name")).toBe("first-name");
     expect(t("x", "text", "section-a address-level2")).toBe("city");
   });
+  it("leaves labels that only contain a mapped word unmapped (live Workday)", () => {
+    for (const label of ["Middle Name", "Address Line 2", "Phone Extension", "Phone Device Type", "Country Phone Code"]) {
+      expect(t(label)).toBeNull();
+    }
+    expect(t("Phone Number")).toBe("phone");
+    expect(t("Address Line 1")).toBe("address");
+    expect(t("Last Name")).toBe("last-name");
+  });
+  it("never extracts page menus as dropdown questions", () => {
+    const d = document.implementation.createHTMLDocument("t");
+    d.body.innerHTML = `<header><button aria-haspopup="listbox" id="settingsSelectorButton"></button>
+        <button aria-haspopup="listbox" aria-label="Language">English</button></header>
+      <label for="c">Country</label><button id="c" aria-haspopup="listbox">Canada</button>`;
+    expect(extractLiveFields(d, { stamp: false }).map((f) => f.label)).toEqual(["Country"]);
+  });
   it("classifies file inputs", () => {
     expect(t("Resume/CV", "file")).toBe("resume");
     expect(t("Cover Letter", "file")).toBe("cover-letter");

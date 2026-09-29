@@ -37,6 +37,9 @@ function hasPhrase(text: string, phrase: string): boolean {
   return new RegExp(`(^|[^a-z])${escapeRe(phrase)}($|[^a-z])`).test(text);
 }
 
+const NOT_PROFILE =
+  /\b(middle name|address line 2|address 2|extension|device type|phone type|(country )?phone code|country code)\b/i;
+
 export function inferValueType(
   label: string,
   htmlType: string,
@@ -47,6 +50,8 @@ export function inferValueType(
   if (AUTOCOMPLETE_TYPES[token]) return { valueType: AUTOCOMPLETE_TYPES[token], confidence: 0.95 };
 
   const text = label.toLowerCase();
+  // Contains a mapped word but means something else: never a profile value.
+  if (NOT_PROFILE.test(text)) return { valueType: null, confidence: 0 };
   if (htmlType === "file") {
     return { valueType: /cover/.test(text) ? "cover-letter" : "resume", confidence: 0.9 };
   }
@@ -301,9 +306,8 @@ export function extractLiveFields(
 
   // Dropdown buttons (Workday: button[aria-haspopup=listbox] showing "Select One").
   for (const btn of deepQueryAll<HTMLElement>(root, "button[aria-haspopup=listbox], [role=button][aria-haspopup=listbox]")) {
-    if (!isListboxButton(btn)) continue;
-    const id = uniqueId(btn.getAttribute(FIELD_ATTR) ?? (btn.id || nextAnon()), used);
-    if (stamp) btn.setAttribute(FIELD_ATTR, id);
+    // Page chrome (Workday's settings/language menu) is not a question.
+    if (!isListboxButton(btn) || btn.closest("header, nav, [role=banner], [role=navigation]")) continue;
     const own = (btn.textContent ?? "").trim();
     const forLabel = btn.id ? rootOf(btn).querySelector(`label[for="${cssEscape(btn.id)}"]`)?.textContent : "";
     // aria-labelledby often lists the button itself ("Country Select One").
@@ -316,6 +320,9 @@ export function extractLiveFields(
     );
     const raw = forLabel?.trim() || byIds || questionText(btn, () => false) || btn.getAttribute("aria-label") || "";
     const label = labelText(raw);
+    if (!label) continue;
+    const id = uniqueId(btn.getAttribute(FIELD_ATTR) ?? (btn.id || nextAnon()), used);
+    if (stamp) btn.setAttribute(FIELD_ATTR, id);
     const { valueType, confidence } = inferValueType(label, "", "", "combobox");
     fields.push({
       id,
