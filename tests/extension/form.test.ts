@@ -214,6 +214,12 @@ describe("inferValueType", () => {
     expect(t("Address Line 1")).toBe("address");
     expect(t("Last Name")).toBe("last-name");
   });
+  it("skips honeypots that announce themselves in the label (live Workday)", () => {
+    const d = document.implementation.createHTMLDocument("t");
+    d.body.innerHTML = `<label for="e">Email Address</label><input id="e" type="email">
+      <label for="w">Enter website. This input is for robots only, do not enter if you're human.</label><input id="w">`;
+    expect(extractLiveFields(d, { stamp: false }).map((f) => f.label)).toEqual(["Email Address"]);
+  });
   it("never extracts page menus as dropdown questions", () => {
     const d = document.implementation.createHTMLDocument("t");
     d.body.innerHTML = `<header><button aria-haspopup="listbox" id="settingsSelectorButton"></button>

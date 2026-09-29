@@ -37,6 +37,9 @@ function hasPhrase(text: string, phrase: string): boolean {
   return new RegExp(`(^|[^a-z])${escapeRe(phrase)}($|[^a-z])`).test(text);
 }
 
+// Bot traps that say so ("This input is for robots only, do not enter").
+const HONEYPOT_LABEL = /\b(for robots|robots only|if you('| a)re (a )?human|leave (this )?(field )?(blank|empty))\b/i;
+
 const NOT_PROFILE =
   /\b(middle name|address line 2|address 2|extension|device type|phone type|(country )?phone code|country code)\b/i;
 
@@ -247,6 +250,7 @@ export function extractLiveFields(
 
     const raw = isGroup ? groupRawLabel(el) : rawLabel(el);
     const label = labelText(raw);
+    if (HONEYPOT_LABEL.test(label)) continue;
     const options =
       tag === "select"
         ? Array.from((el as HTMLSelectElement).options)
