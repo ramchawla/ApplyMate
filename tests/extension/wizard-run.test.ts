@@ -201,7 +201,7 @@ describe("wizard engine", () => {
         d.getElementById("dev")!.textContent = opt.textContent;
         d.getElementById("dev-lb")?.remove();
       } else if (btn && !d.getElementById("dev-lb")) {
-        d.body.insertAdjacentHTML("beforeend", `<ul role="listbox" id="dev-lb"><li role="option">Mobile</li><li role="option">Home</li></ul>`);
+        d.body.insertAdjacentHTML("beforeend", `<ul role="listbox" id="dev-lb"><li role="option">Select One</li><li role="option">Mobile</li><li role="option">Home</li></ul>`);
       }
     });
     d.addEventListener("keydown", (e) => {

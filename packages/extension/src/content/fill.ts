@@ -300,7 +300,8 @@ export async function readOptions(btn: HTMLElement): Promise<string[]> {
     await sleep(50);
     options = scopedOptions(btn);
   }
-  const texts = options.map((o) => cleanText(o.textContent ?? "")).filter(Boolean);
+  // "Select One" is the empty state, not an answer.
+  const texts = options.map((o) => cleanText(o.textContent ?? "")).filter((t) => t && !PLACEHOLDER.test(t));
   keyTap(btn, "Escape");
   return texts;
 }
