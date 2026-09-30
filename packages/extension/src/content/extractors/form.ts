@@ -186,9 +186,18 @@ function isTrapOrPlumbing(el: HTMLElement, htmlType: string): boolean {
   return false;
 }
 
-function uniqueId(base: string, used: Set<string>): string {
+// `used` covers this scan's own ids; `taken` also covers ids already
+// stamped elsewhere in the document — a per-entry scan (Workday) never
+// sees a sibling entry's own elements, so it can't otherwise tell its
+// minted id collides with one already on the page.
+function uniqueId(
+  base: string,
+  used: Set<string>,
+  taken: (id: string, selves: Element[]) => boolean,
+  selves: Element[],
+): string {
   let id = base;
-  for (let i = 2; used.has(id); i++) id = `${base}#${i}`;
+  for (let i = 2; used.has(id) || taken(id, selves); i++) id = `${base}#${i}`;
   used.add(id);
   return id;
 }
@@ -206,7 +215,18 @@ export function extractLiveFields(
 ): FormField[] {
   const fields: FormField[] = [];
   const used = new Set<string>();
-  const seenGroups = new Set<string>();
+  // M2/M3 both key group identity by name; scope every same-named lookup to
+  // the same shadow root AND the same fieldset/role=group as `el`.
+  // Object identity, not a stringified key: every ShadowRoot stringifies
+  // to the same "[object ShadowRoot]", so a string key would still merge
+  // same-named groups across different shadow roots.
+  const seenGroups: { htmlType: string; name: string; root: Node; group: Element | null }[] = [];
+  const doc = root.ownerDocument ?? (root as Document);
+  // Excludes `selves` (the element(s) about to be stamped with this id):
+  // re-scanning an already-stamped element/group must not treat its own
+  // existing id as a collision (ids stay stable across re-scans).
+  const taken = (id: string, selves: Element[]) =>
+    deepQueryAll(doc, `[${FIELD_ATTR}="${cssEscape(id)}"]`).some((el) => !selves.includes(el));
 
   for (const el of deepQueryAll<HTMLElement>(root, "input, textarea, select")) {
     const tag = el.tagName.toLowerCase();
@@ -229,20 +249,29 @@ export function extractLiveFields(
     const groupInputs =
       (htmlType === "radio" || htmlType === "checkbox") && input.name
         ? deepQueryAll<HTMLInputElement>(root, `input[type=${htmlType}][name="${cssEscape(input.name)}"]`).filter(
-            (c) => !ownGroup || c.closest("fieldset, [role=group], [role=radiogroup]") === ownGroup,
+            (c) =>
+              c.getRootNode() === el.getRootNode() &&
+              (!ownGroup || c.closest("fieldset, [role=group], [role=radiogroup]") === ownGroup),
           )
         : [];
     const isGroup = htmlType === "radio" ? groupInputs.length > 0 : groupInputs.length > 1;
     if (isGroup) {
-      const key = `${htmlType}:${input.name}`;
-      if (seenGroups.has(key)) continue;
-      seenGroups.add(key);
+      // Scoped: a same-named list in a different shadow root or a different
+      // fieldset is a different question, not a continuation of this one.
+      const root = el.getRootNode();
+      const seen = seenGroups.some(
+        (s) => s.htmlType === htmlType && s.name === input.name && s.root === root && s.group === ownGroup,
+      );
+      if (seen) continue;
+      seenGroups.push({ htmlType, name: input.name, root, group: ownGroup });
     }
 
     const id = uniqueId(
       el.getAttribute(FIELD_ATTR) ??
         ((isGroup ? input.name : el.id || el.getAttribute("name")) || nextAnon()),
       used,
+      taken,
+      isGroup ? groupInputs : [el],
     );
     if (stamp) for (const target of isGroup ? groupInputs : [el]) target.setAttribute(FIELD_ATTR, id);
 
@@ -301,7 +330,7 @@ export function extractLiveFields(
     if (group.querySelector("input")) continue;
     const radios = Array.from(group.querySelectorAll<HTMLElement>("[role=radio]"));
     if (radios.length === 0) continue;
-    const id = uniqueId(group.getAttribute(FIELD_ATTR) ?? nextAnon(), used);
+    const id = uniqueId(group.getAttribute(FIELD_ATTR) ?? nextAnon(), used, taken, [group]);
     if (stamp) group.setAttribute(FIELD_ATTR, id);
     const raw =
       group.getAttribute("aria-label") || labelledBy(group) || questionText(group, () => false);
@@ -336,7 +365,7 @@ export function extractLiveFields(
     const raw = forLabel?.trim() || byIds || questionText(btn, () => false) || btn.getAttribute("aria-label") || "";
     const label = labelText(raw);
     if (!label) continue;
-    const id = uniqueId(btn.getAttribute(FIELD_ATTR) ?? (btn.id || nextAnon()), used);
+    const id = uniqueId(btn.getAttribute(FIELD_ATTR) ?? (btn.id || nextAnon()), used, taken, [btn]);
     if (stamp) btn.setAttribute(FIELD_ATTR, id);
     const { valueType, confidence } = inferValueType(label, "", "", "combobox");
     fields.push({
@@ -359,7 +388,7 @@ export function extractLiveFields(
     seenGroupsEl.add(group);
     const buttons = toggleButtons(group);
     if (!buttons.length) continue;
-    const id = uniqueId(group.getAttribute(FIELD_ATTR) ?? nextAnon(), used);
+    const id = uniqueId(group.getAttribute(FIELD_ATTR) ?? nextAnon(), used, taken, [group]);
     if (stamp) group.setAttribute(FIELD_ATTR, id);
     const raw = labelledBy(group) || questionText(group, () => false);
     const label = labelText(raw);

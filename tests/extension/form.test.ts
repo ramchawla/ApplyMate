@@ -286,6 +286,50 @@ describe("checkbox groups", () => {
   });
 });
 
+describe("checkbox/radio grouping edge cases", () => {
+  it("never merges same-named radios across separate shadow roots", () => {
+    document.body.innerHTML = `<div id="h1"></div><div id="h2"></div>`;
+    const s1 = document.getElementById("h1")!.attachShadow({ mode: "open" });
+    const s2 = document.getElementById("h2")!.attachShadow({ mode: "open" });
+    s1.innerHTML = `<label>Q1</label><input type="radio" name="opt" value="a">Yes<input type="radio" name="opt" value="b">No`;
+    s2.innerHTML = `<label>Q2</label><input type="radio" name="opt" value="a">Yes<input type="radio" name="opt" value="b">No`;
+    const fields = extractLiveFields(document);
+    // Both radio questions must survive as their own groups, each with 2 options.
+    expect(fields).toHaveLength(2);
+    expect(fields.every((f) => f.options?.length === 2)).toBe(true);
+    document.body.innerHTML = "";
+  });
+
+  it("keeps two same-named checkbox lists in separate fieldsets as separate questions", () => {
+    document.body.innerHTML = `
+      <fieldset><legend>Languages</legend>
+        <label><input type="checkbox" name="opts" value="en">English</label>
+        <label><input type="checkbox" name="opts" value="fr">French</label></fieldset>
+      <fieldset><legend>Frameworks</legend>
+        <label><input type="checkbox" name="opts" value="react">React</label>
+        <label><input type="checkbox" name="opts" value="vue">Vue</label></fieldset>`;
+    const fields = extractLiveFields(document, { stamp: false });
+    expect(fields.map((f) => f.label)).toEqual(["Languages", "Frameworks"]);
+    document.body.innerHTML = "";
+  });
+
+  it("never reuses an id already stamped elsewhere when a per-entry scan (Workday's own pattern) mints one for a new, unnamed group", () => {
+    document.body.innerHTML = `
+      <div role="group" id="e1"><h4>Entry 1</h4><input type="checkbox" name="opt"></div>
+      <div role="group" id="e2"><h4>Entry 2</h4><input type="checkbox" name="opt"></div>`;
+    extractLiveFields(document.getElementById("e1")!); // stamps entry 1's checkbox "opt", scoped to entry 1 alone
+    // The Workday adapter scans each entry ALONE (fillWorkdaySections calls
+    // extractLiveFields(entry) per entry) — entry 1's existing stamp is
+    // invisible to this call, so it must not be reused blindly.
+    extractLiveFields(document.getElementById("e2")!);
+    const stamped = [...document.querySelectorAll("input[type=checkbox]")].map((el) =>
+      el.getAttribute("data-applymate-id"),
+    );
+    expect(new Set(stamped).size).toBe(2);
+    document.body.innerHTML = "";
+  });
+});
+
 describe("scrolled pages", () => {
   it("keeps fields scrolled above the viewport but drops ones parked off the page", () => {
     document.body.innerHTML = `<label for="a">City</label><input id="a"><label for="b">Website</label><input id="b">`;
