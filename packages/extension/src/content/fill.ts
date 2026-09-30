@@ -302,11 +302,15 @@ const keyTap = (el: HTMLElement, key: string) => {
 // Workday dropdown: press the button, pick from the listbox it opens.
 // Dropdown buttons (Workday) render options only while open: open, read,
 // close — so Claude can answer with an exact option.
+// A page mid a burst of its own work (many questions rendering, answers
+// just landed) can be slow to open the next listbox — give it real room.
+const LISTBOX_WAIT_MS = 5000;
+
 export async function readOptions(btn: HTMLElement): Promise<string[]> {
   if (!isListboxButton(btn)) return [];
   press(btn);
   let options: HTMLElement[] = [];
-  for (let t = 0; t < 30 && !options.length; t++) {
+  for (let t = 0; t < LISTBOX_WAIT_MS / 50 && !options.length; t++) {
     await sleep(50);
     options = scopedOptions(btn);
   }
@@ -318,7 +322,7 @@ export async function readOptions(btn: HTMLElement): Promise<string[]> {
 
 async function fillListboxButton(btn: HTMLElement, value: string): Promise<boolean> {
   press(btn);
-  const pick = await waitForMatch(btn, value, 1500);
+  const pick = await waitForMatch(btn, value, LISTBOX_WAIT_MS);
   if (!pick) {
     keyTap(btn, "Escape");
     return false;

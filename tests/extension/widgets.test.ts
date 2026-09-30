@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { extractLiveFields } from "../../packages/extension/src/content/extractors/form";
-import { applyFill, highlightEmptyRequired } from "../../packages/extension/src/content/fill";
+import { applyFill, highlightEmptyRequired, readOptions } from "../../packages/extension/src/content/fill";
 
 function page(html: string): Document {
   const d = document.implementation.createHTMLDocument("t");
@@ -23,6 +23,8 @@ function listbox(d: Document, items: string[], onPick: (t: string) => void, attr
 }
 
 describe("dropdown buttons (Workday)", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("extracts and fills a listbox button", async () => {
     const d = page(`<label for="country--country">Country*</label>
       <button id="country--country" aria-haspopup="listbox" aria-expanded="false">Select One</button>`);
@@ -35,6 +37,36 @@ describe("dropdown buttons (Workday)", () => {
     const res = await applyFill([{ fieldId: fields[0].id, value: "Canada" }], d);
     expect(res.filled).toEqual([fields[0].id]);
     expect(btn.textContent).toBe("Canada");
+  });
+
+  it("waits out a slow-to-render option list (a busy real page) before giving up", async () => {
+    vi.useFakeTimers();
+    const d = page(`<label for="q">18+?*</label>
+      <button id="q" aria-haspopup="listbox" aria-expanded="false">Select One</button>`);
+    const btn = d.getElementById("q")!;
+    btn.addEventListener("click", () => {
+      // Real Workday, mid a busy page: the listbox renders a beat late.
+      setTimeout(() => listbox(d, ["Yes", "No"], (t) => (btn.textContent = t)), 3000);
+    });
+    const [f] = extractLiveFields(d);
+    const promise = applyFill([{ fieldId: f.id, value: "Yes" }], d);
+    await vi.advanceTimersByTimeAsync(4000);
+    const res = await promise;
+    expect(res.filled).toEqual([f.id]);
+    expect(btn.textContent).toBe("Yes");
+  });
+
+  it("waits out a slow-to-render option list when just reading it too", async () => {
+    vi.useFakeTimers();
+    const d = page(`<label for="q">Security clearance?</label>
+      <button id="q" aria-haspopup="listbox" aria-expanded="false">Select One</button>`);
+    const btn = d.getElementById("q")!;
+    btn.addEventListener("click", () => {
+      setTimeout(() => listbox(d, ["Yes", "No"], () => {}), 3000);
+    });
+    const promise = readOptions(btn);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(await promise).toEqual(["Yes", "No"]);
   });
 
   it("drops the button's own placeholder text from an aria-labelledby label", () => {
