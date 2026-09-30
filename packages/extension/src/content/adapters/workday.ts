@@ -126,7 +126,10 @@ export async function waitUntil(check: () => boolean, ms: number): Promise<boole
 
 async function addUntil(section: Element, spec: SectionSpec, want: number): Promise<number> {
   let added = 0;
-  while (entriesOf(section, spec.entry).length < want) {
+  // Capped by attempts too: a page whose entries never actually stick
+  // (reverted right after appearing) could otherwise keep reporting
+  // momentary growth forever, since only the live count is checked.
+  while (added < want && entriesOf(section, spec.entry).length < want) {
     const btn = addButton(section, spec.title);
     if (!btn) break;
     const before = entriesOf(section, spec.entry).length;
