@@ -266,3 +266,27 @@ describe("Workday prompts", () => {
     expect(highlightEmptyRequired(empty, extractLiveFields(empty))).toHaveLength(1);
   });
 });
+
+describe("Workday — checkbox scoping through the real wizard loop", () => {
+  // Real Workday reuses name="currentlyWorkHere" across every entry — the
+  // wizard's own whole-page scan (fields, below) must not merge them before
+  // the adapter's per-entry pass ever runs.
+  it("checks only the current entry's checkbox when the step is scanned whole-page first, as runOneClick does", async () => {
+    const { d } = myExperience();
+    // Pre-create both entries (as the run itself would) so the shared name
+    // — real Workday reuses it across every entry — can be set before the run.
+    const addBtn = d.querySelector("[data-automation-id=workExperienceSection] button")!;
+    addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    addBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    for (const id of ["w1-cur", "w2-cur"]) d.getElementById(id)!.setAttribute("name", "currentlyWorkHere");
+    const report = await runOneClick({
+      doc: d, fields: extractLiveFields(d), keywords: [], pollMs: 1, settleMs: 1, stepTimeoutMs: 300, tailorJobId: "T0",
+      jd: { url: "u", title: "", company: "", description: "" }, jdSource: "none",
+      send: async (m: any) => (m.type === "GET_PROFILE" ? profile : { error: "offline" }),
+      onStatus: () => {},
+    });
+    const boxes = [...d.querySelectorAll<HTMLInputElement>("input[type=checkbox][id$='-cur']")];
+    expect(boxes.map((b) => b.checked)).toEqual([true, false]);
+    expect(report.filled).toBeGreaterThan(0);
+  });
+});
