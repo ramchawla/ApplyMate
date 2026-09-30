@@ -213,12 +213,18 @@ export function extractLiveFields(
     if (htmlType === "checkbox" && el.parentElement && toggleButtons(el.parentElement).length) continue;
 
     const input = el as HTMLInputElement;
-    // Scoped to `root`, not the whole page: a repeating section can reuse
-    // the same name in every entry (Workday's "currentlyWorkHere" on every
-    // Work Experience row) — those are separate questions, not one group.
+    // Scoped to `root`, and — when the input sits in a fieldset/role=group —
+    // to that same container: a repeating section can reuse one name in
+    // every entry (Workday's "currentlyWorkHere" on every Work Experience
+    // row), each wrapped in its own group. Those are separate questions,
+    // not one multi-select; a real "check all that apply" list shares one
+    // wrapping fieldset, so this doesn't affect it.
+    const ownGroup = el.closest("fieldset, [role=group], [role=radiogroup]");
     const groupInputs =
       (htmlType === "radio" || htmlType === "checkbox") && input.name
-        ? deepQueryAll<HTMLInputElement>(root, `input[type=${htmlType}][name="${cssEscape(input.name)}"]`)
+        ? deepQueryAll<HTMLInputElement>(root, `input[type=${htmlType}][name="${cssEscape(input.name)}"]`).filter(
+            (c) => !ownGroup || c.closest("fieldset, [role=group], [role=radiogroup]") === ownGroup,
+          )
         : [];
     const isGroup = htmlType === "radio" ? groupInputs.length > 0 : groupInputs.length > 1;
     if (isGroup) {

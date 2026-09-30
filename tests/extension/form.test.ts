@@ -250,6 +250,29 @@ describe("inferValueType", () => {
   });
 });
 
+describe("checkbox groups", () => {
+  it("keeps a real multi-select group together (one shared fieldset)", () => {
+    document.body.innerHTML = `<fieldset><legend>Languages spoken</legend>
+      <label><input type="checkbox" name="lang" value="en">English</label>
+      <label><input type="checkbox" name="lang" value="fr">French</label></fieldset>`;
+    const [f] = extractLiveFields(document, { stamp: false });
+    expect(f.options).toEqual(["English", "French"]);
+    document.body.innerHTML = "";
+  });
+
+  it("never merges the same checkbox name across separate repeating entries (real Workday, scanned from the whole page)", () => {
+    document.body.innerHTML = `
+      <div role="group"><h4>Work Experience 1</h4><input type="checkbox" name="currentlyWorkHere" id="cw1"><label for="cw1">I currently work here</label></div>
+      <div role="group"><h4>Work Experience 2</h4><input type="checkbox" name="currentlyWorkHere" id="cw2"><label for="cw2">I currently work here</label></div>`;
+    // A full-page scan, as the wizard loop does every step — not scoped to one entry.
+    const fields = extractLiveFields(document);
+    const cw = fields.filter((f) => f.label === "I currently work here");
+    expect(cw).toHaveLength(2);
+    expect(cw[0].id).not.toBe(cw[1].id);
+    document.body.innerHTML = "";
+  });
+});
+
 describe("scrolled pages", () => {
   it("keeps fields scrolled above the viewport but drops ones parked off the page", () => {
     document.body.innerHTML = `<label for="a">City</label><input id="a"><label for="b">Website</label><input id="b">`;
