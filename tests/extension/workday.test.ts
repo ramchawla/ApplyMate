@@ -142,6 +142,34 @@ describe("Workday adapter", () => {
     expect(adds.work).toBe(0);
   });
 
+  it("never crashes on a real Workday date group's decorative display div", async () => {
+    const d = myExperience().d;
+    const box = d.querySelector("[data-automation-id=workExperienceSection]")!;
+    box.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const entry = d.querySelector("[role=group]")!;
+    // Real Workday: a non-input "-display" div sits beside each "-input".
+    for (const aid of ["dateSectionMonth", "dateSectionYear"]) {
+      entry.querySelector(`[data-automation-id="${aid}-input"]`)!.insertAdjacentHTML(
+        "beforebegin",
+        `<div data-automation-id="${aid}-display">--</div>`,
+      );
+    }
+    await expect(fillWorkdaySections(d, profile, () => false)).resolves.not.toThrow();
+    expect(val(d, "w1-title")).toBe("Senior Software Engineer");
+  });
+
+  it("ignores the display div beside a real Workday date input", () => {
+    const d = document.implementation.createHTMLDocument("t");
+    d.body.innerHTML = `<div data-automation-id="formField-startDate"><label>From*</label>
+        <div data-automation-id="dateSectionMonth-display">MM</div>
+        <input data-automation-id="dateSectionMonth-input">
+        <div data-automation-id="dateSectionYear-display">YYYY</div>
+        <input data-automation-id="dateSectionYear-input"></div>`;
+    expect(() => fillWorkdayDates(d)).not.toThrow();
+    const box = d.querySelector("[data-automation-id=formField-startDate]")!;
+    expect(box.querySelector("[data-automation-id=dateSectionMonth-display]")!.textContent).toBe("MM");
+  });
+
   it("fills a self-identify Date spinner group with today, leaving other dates alone", () => {
     const d = document.implementation.createHTMLDocument("t");
     d.body.innerHTML = `<div data-automation-id="formField-dateSignedOn"><label>Date*</label>

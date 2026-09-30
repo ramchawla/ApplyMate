@@ -68,7 +68,9 @@ const SECTIONS: SectionSpec[] = [
 const MAX_ENTRIES = 5;
 const ADD_TEXT = /^add( another)?\b/i;
 const HEADINGS = "h1, h2, h3, h4, h5, h6, [role=heading]";
-const DATE_INPUT = "[data-automation-id^=dateSection]";
+// Real Workday pairs each "-input" with a non-input "-display" div; only
+// the input has a value to type into.
+const DATE_INPUT = "input[data-automation-id^=dateSection]";
 
 const headingsIn = (root: ParentNode, re: RegExp) =>
   deepQueryAll<HTMLElement>(root, HEADINGS).filter((h) => re.test(cleanText(h.textContent ?? "")));
