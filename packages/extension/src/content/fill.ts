@@ -411,10 +411,15 @@ async function fillElement(el: HTMLElement, value: string): Promise<boolean> {
 export async function applyFill(
   instructions: FillInstruction[],
   doc: Document,
+  // Checked at each field's own turn, not once for the whole batch up
+  // front: a busy page's fills can span a minute or more, and the user may
+  // edit a later field while earlier ones are still being filled.
+  isTouched?: (fieldId: string) => boolean,
 ): Promise<FillResult> {
   const filled: string[] = [];
   const missing: string[] = [];
   for (const ins of instructions) {
+    if (isTouched?.(ins.fieldId)) continue;
     const el = findField(doc, ins.fieldId);
     if (el && ins.value.trim() && (await fillElement(el, ins.value))) filled.push(ins.fieldId);
     else missing.push(ins.fieldId);

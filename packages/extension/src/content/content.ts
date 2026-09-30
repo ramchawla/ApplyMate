@@ -157,7 +157,6 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
     lines.push(line);
     ctx.onStatus([...lines]);
   };
-  const untouched = (i: { fieldId: string }) => !touched.has(i.fieldId);
   const job = {
     title: ctx.jd.title,
     company: ctx.jd.company,
@@ -237,7 +236,7 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
       if (wd.added) fields = extractLiveFields(scopeRoot(doc));
     }
     const plan = buildInstantPlan(fields.filter((f) => !owned.has(f.id)), profile);
-    const first = await applyFill(plan.instructions.filter(untouched), doc);
+    const first = await applyFill(plan.instructions, doc, (id) => touched.has(id));
     const filledHere = first.filled.length + adapterFilled;
     report.filled += filledHere;
 
@@ -312,7 +311,7 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
         // Resume parsers (Lever, Ashby, Workday) overwrite fields on upload —
         // let them finish, then re-apply the profile values.
         await sleep(ctx.settleMs ?? 1500);
-        await applyFill(plan.instructions.filter(untouched), doc);
+        await applyFill(plan.instructions, doc, (id) => touched.has(id));
       }
     }
     if (wizard && questions.length) {
@@ -323,7 +322,11 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
     // Only what was asked: a consent box or a field the user filled never
     // takes an answer, whatever comes back.
     const asked = new Set([...questions.map((q) => q.id), coverField?.id]);
-    const second = await applyFill(answers.filter((a) => asked.has(a.fieldId) && untouched(a)), doc);
+    const second = await applyFill(
+      answers.filter((a) => asked.has(a.fieldId)),
+      doc,
+      (id) => touched.has(id),
+    );
     if (attachedNote || second.filled.length) {
       status({ tone: "ok", text: [attachedNote, `${second.filled.length} answers drafted`].filter(Boolean).join(" · ") }, "wait");
     }

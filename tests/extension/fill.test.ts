@@ -85,6 +85,28 @@ describe("applyFill", () => {
     expect((d.getElementById("cw2") as HTMLInputElement).checked).toBe(false);
   });
 
+  it("checks isTouched at each field's own turn, not once for the whole batch up front", async () => {
+    const d = doc(`<input id="a"><input id="b">`);
+    extractLiveFields(d);
+    let calls = 0;
+    // "b" becomes touched only by the time its own turn comes — the real
+    // scenario on a slow page, where the user types into a later field
+    // while earlier ones are still being filled.
+    const res = await applyFill(
+      [
+        { fieldId: "a", value: "profile-a" },
+        { fieldId: "b", value: "profile-b" },
+      ],
+      d,
+      (id) => {
+        calls++;
+        return id === "b" && calls > 1;
+      },
+    );
+    expect(res.filled).toEqual(["a"]);
+    expect((d.getElementById("b") as HTMLInputElement).value).toBe("");
+  });
+
   it("reports missing fields and unmatched options", async () => {
     const d = doc(`<select id="s"><option>A</option></select>`);
     extractLiveFields(d);

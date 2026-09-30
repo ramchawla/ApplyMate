@@ -206,7 +206,7 @@ export async function fillWorkdaySections(
           const el = findField(doc, f.id);
           return value && el && isFieldEmpty(el) && !isTouched(f.id) ? [{ fieldId: f.id, value }] : [];
         });
-        filled += (await applyFill(instructions, doc)).filled.length;
+        filled += (await applyFill(instructions, doc, isTouched)).filled.length;
         for (const g of dateGroups(entry)) {
           const start = /start|from|first/i.test(g.label);
           const end = !start && /end|\bto\b|last/i.test(g.label) && item.current !== "true";
