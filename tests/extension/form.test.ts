@@ -213,7 +213,20 @@ describe("inferValueType", () => {
     expect(t("Phone Number")).toBe("phone");
     expect(t("Address Line 1")).toBe("address");
     expect(t("Last Name")).toBe("last-name");
+    // A mapped word as a SUBSTRING of a longer, unrelated label must not match.
+    expect(t("Phone number (including country code)")).toBe("phone");
+    expect(t("Mobile phone (with extension)")).toBe("phone");
   });
+  it("classifies a resume field even when its label mentions a file extension", () => {
+    expect(t("Resume (file extension: pdf)", "file")).toBe("resume");
+  });
+  it("keeps real optional fields whose helper text mentions leaving them blank", () => {
+    const d = document.implementation.createHTMLDocument("t");
+    d.body.innerHTML = `<label for="li">LinkedIn Profile (leave blank if none)</label><input id="li">
+      <label for="pn">Preferred name - leave blank if same as legal name</label><input id="pn">`;
+    expect(extractLiveFields(d, { stamp: false }).map((f) => f.label)).toHaveLength(2);
+  });
+
   it("skips honeypots that announce themselves in the label (live Workday)", () => {
     const d = document.implementation.createHTMLDocument("t");
     d.body.innerHTML = `<label for="e">Email Address</label><input id="e" type="email">

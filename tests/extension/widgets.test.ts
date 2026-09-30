@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { extractLiveFields } from "../../packages/extension/src/content/extractors/form";
 import { applyFill, highlightEmptyRequired, readOptions } from "../../packages/extension/src/content/fill";
+const LISTBOX_WAIT_MS_FOR_TEST = 1500; // must stay well under the 5s cap this test guards against
 
 function page(html: string): Document {
   const d = document.implementation.createHTMLDocument("t");
@@ -67,6 +68,41 @@ describe("dropdown buttons (Workday)", () => {
     const promise = readOptions(btn);
     await vi.advanceTimersByTimeAsync(4000);
     expect(await promise).toEqual(["Yes", "No"]);
+  });
+
+  it("gives up quickly once options are rendered and settled with no match, instead of waiting out the full timeout", async () => {
+    vi.useFakeTimers();
+    const d = page(`<label for="q">Country*</label>
+      <button id="q" aria-haspopup="listbox" aria-expanded="false">Select One</button>`);
+    const btn = d.getElementById("q")!;
+    btn.addEventListener("click", () => listbox(d, ["France", "Germany"], () => {}));
+    const [f] = extractLiveFields(d);
+    const promise = applyFill([{ fieldId: f.id, value: "Canada" }], d);
+    let resolved = false;
+    void promise.then(() => (resolved = true));
+    // Well past the settle window, well short of the full listbox timeout.
+    await vi.advanceTimersByTimeAsync(LISTBOX_WAIT_MS_FOR_TEST);
+    expect(resolved).toBe(true);
+    expect((await promise).filled).toEqual([]);
+  });
+
+  it("keeps waiting while a search widens the option list, even past the settle window", async () => {
+    vi.useFakeTimers();
+    const d = page(`<label for="q">School*</label>
+      <button id="q" aria-haspopup="listbox" aria-expanded="false">Select One</button>`);
+    const btn = d.getElementById("q")!;
+    btn.addEventListener("click", () => {
+      listbox(d, ["Toronto Metropolitan University"], () => {});
+      // A slow search keeps adding results, none matching yet, past 400ms.
+      setTimeout(() => listbox(d, ["Trent University"], () => {}), 350);
+      setTimeout(() => listbox(d, ["University of Toronto"], (t) => (btn.textContent = t)), 700);
+    });
+    const [f] = extractLiveFields(d);
+    const promise = applyFill([{ fieldId: f.id, value: "University of Toronto" }], d);
+    await vi.advanceTimersByTimeAsync(1000);
+    const res = await promise;
+    expect(res.filled).toEqual([f.id]);
+    expect(btn.textContent).toBe("University of Toronto");
   });
 
   it("drops the button's own placeholder text from an aria-labelledby label", () => {

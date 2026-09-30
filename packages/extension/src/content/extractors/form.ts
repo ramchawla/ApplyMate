@@ -38,10 +38,16 @@ function hasPhrase(text: string, phrase: string): boolean {
 }
 
 // Bot traps that say so ("This input is for robots only, do not enter").
-const HONEYPOT_LABEL = /\b(for robots|robots only|if you('| a)re (a )?human|leave (this )?(field )?(blank|empty))\b/i;
+// "leave blank" alone is common helper text on real optional fields
+// (LinkedIn URL, preferred name) — require an actual bot word alongside it.
+const HONEYPOT_LABEL =
+  /\b(for robots|robots only|if you('| a)re (a )?human|(bot|robot|spam)s? .*(leave|do not enter))\b/i;
 
+// Matches only the WHOLE label, not a substring: "extension" alone must
+// mean the phone extension field, not "Resume (file extension: pdf)" or
+// "Phone number (including country code)".
 const NOT_PROFILE =
-  /\b(middle name|address line 2|address 2|extension|device type|phone type|(country )?phone code|country code)\b/i;
+  /^(middle name|address line 2|address 2|(phone )?extension|(phone )?device type|phone type|(country )?phone code|(phone )?country code)$/i;
 
 export function inferValueType(
   label: string,

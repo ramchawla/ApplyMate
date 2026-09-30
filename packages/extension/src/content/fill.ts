@@ -210,20 +210,30 @@ function waitForMatch(
   ms: number,
 ): Promise<HTMLElement | null> {
   const doc = input.ownerDocument;
-  const now = findOption(input, value);
-  if (now) return Promise.resolve(now);
   return new Promise((resolve) => {
+    let quiet: ReturnType<typeof setTimeout> | undefined;
     const done = (pick: HTMLElement | null) => {
       observer.disconnect();
       clearTimeout(timer);
+      clearTimeout(quiet);
       resolve(pick);
     };
-    const observer = new MutationObserver(() => {
+    const check = () => {
       const pick = findOption(input, value);
-      if (pick) done(pick);
-    });
+      if (pick) return done(pick);
+      // Options rendered but none match: give it a short quiet period to
+      // fail fast (a real page done rendering) rather than the full
+      // timeout. A search still adding results keeps resetting this on
+      // every mutation, so a slow but genuinely progressing fetch isn't cut off.
+      clearTimeout(quiet);
+      if (scopedOptions(input).length) quiet = setTimeout(() => done(null), 400);
+    };
+    const observer = new MutationObserver(check);
     const timer = setTimeout(() => done(null), ms);
     observer.observe(doc.documentElement, { childList: true, subtree: true, characterData: true });
+    // The widget may already have opened synchronously (e.g. on the press
+    // that triggered this wait) before the observer above ever attaches.
+    check();
   });
 }
 
