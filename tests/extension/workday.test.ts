@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+  waitUntil,
   isWorkday,
   fillWorkdaySections,
   fillWorkdayDates,
@@ -194,6 +195,26 @@ describe("Workday adapter", () => {
     expect(val(d, "w1-title")).toBe("Senior Software Engineer");
     expect(val(d, "w2-title")).toBe("Software Engineer");
     expect(report.filled).toBeGreaterThan(10);
+  });
+});
+
+describe("waitUntil", () => {
+  it("uses wall-clock elapsed time, not an iteration count — a throttled background tab must not stretch the budget", async () => {
+    const spy = vi.spyOn(Date, "now");
+    let now = 1_000_000;
+    spy.mockImplementation(() => now);
+    let calls = 0;
+    // Each check simulates a throttled tab: ~1s of real time passes per tick,
+    // not the 50ms the old code assumed.
+    const check = () => {
+      calls++;
+      now += 1000;
+      return false;
+    };
+    const ok = await waitUntil(check, 3000);
+    expect(ok).toBe(false);
+    expect(calls).toBeLessThanOrEqual(4); // wall-clock budget, not 3000/50 = 60 iterations
+    spy.mockRestore();
   });
 });
 

@@ -57,6 +57,24 @@ describe("dropdown buttons (Workday)", () => {
     expect(btn.textContent).toBe("Yes");
   });
 
+  it("readOptions uses wall-clock elapsed time, not an iteration count", { timeout: 8000 }, async () => {
+    const spy = vi.spyOn(Date, "now");
+    let mocked = 2_000_000;
+    // A throttled background tab: real time races ahead of the nominal
+    // per-tick amount the old code assumed.
+    spy.mockImplementation(() => (mocked += 300));
+    const d = page(`<label for="q">Country*</label>
+      <button id="q" aria-haspopup="listbox" aria-expanded="false">Select One</button>`);
+    const btn = d.getElementById("q")!; // never opens: no click listener renders options
+    const t0 = performance.now();
+    await readOptions(btn);
+    const realElapsedMs = performance.now() - t0;
+    // A wall-clock deadline gives up within a couple of seconds of REAL
+    // time here; counting fixed-size ticks would still run the real ~5s.
+    expect(realElapsedMs).toBeLessThan(2000);
+    spy.mockRestore();
+  });
+
   it("waits out a slow-to-render option list when just reading it too", async () => {
     vi.useFakeTimers();
     const d = page(`<label for="q">Security clearance?</label>

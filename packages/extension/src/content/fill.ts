@@ -320,7 +320,11 @@ export async function readOptions(btn: HTMLElement): Promise<string[]> {
   if (!isListboxButton(btn)) return [];
   press(btn);
   let options: HTMLElement[] = [];
-  for (let t = 0; t < LISTBOX_WAIT_MS / 50 && !options.length; t++) {
+  // A wall-clock deadline, not a tick count: Chrome throttles timers in
+  // background tabs, so counting sleep(50) ticks could stretch this well
+  // past the intended budget.
+  const deadline = Date.now() + LISTBOX_WAIT_MS;
+  while (!options.length && Date.now() < deadline) {
     await sleep(50);
     options = scopedOptions(btn);
   }

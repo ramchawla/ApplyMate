@@ -112,9 +112,13 @@ function entriesOf(section: Element, re: RegExp): Element[] {
 const ADD_WAIT_MS = 12_000;
 const FIELDS_WAIT_MS = 3_000;
 
-async function waitUntil(check: () => boolean, ms: number): Promise<boolean> {
-  for (let waited = 0; !check(); waited += 50) {
-    if (waited >= ms) return false;
+// A wall-clock deadline, not an iteration count: Chrome throttles timers in
+// background tabs (a 50ms sleep can take ~1s), so counting ticks would let
+// a backgrounded run blow past its intended budget by an order of magnitude.
+export async function waitUntil(check: () => boolean, ms: number): Promise<boolean> {
+  const deadline = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() >= deadline) return false;
     await sleep(50);
   }
   return true;
