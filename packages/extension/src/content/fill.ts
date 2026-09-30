@@ -109,7 +109,17 @@ function fillSelect(el: HTMLSelectElement, value: string): boolean {
   return true;
 }
 
+// Same "name" can appear in unrelated groups (real Workday repeats
+// "currentlyWorkHere" across every Work Experience entry) — the stamped
+// applymate id already scopes to this one group's inputs; only fall back to
+// name when unstamped (fields not yet scanned through extractLiveFields).
 function group(el: HTMLInputElement): HTMLInputElement[] {
+  const stampId = el.getAttribute(FIELD_ATTR);
+  if (stampId) {
+    return Array.from(
+      rootOf(el).querySelectorAll<HTMLInputElement>(`[${FIELD_ATTR}="${cssEscape(stampId)}"]`),
+    ).filter((e) => e.type === el.type);
+  }
   return el.name
     ? Array.from(
         rootOf(el).querySelectorAll<HTMLInputElement>(

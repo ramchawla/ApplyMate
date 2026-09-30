@@ -71,6 +71,20 @@ describe("applyFill", () => {
     expect((d.getElementById("c") as HTMLInputElement).checked).toBe(true);
   });
 
+  it("checks a lone checkbox even when a same-named checkbox exists in a separate entry (real Workday)", async () => {
+    const d = doc(`
+      <div role="group"><h4>Work Experience 1</h4><input type="checkbox" name="currentlyWorkHere" id="cw1"><label for="cw1">I currently work here</label></div>
+      <div role="group"><h4>Work Experience 2</h4><input type="checkbox" name="currentlyWorkHere" id="cw2"><label for="cw2">I currently work here</label></div>`);
+    // Each entry is scanned and stamped on its own, as the Workday adapter does per entry.
+    extractLiveFields(d.querySelectorAll("[role=group]")[0]);
+    extractLiveFields(d.querySelectorAll("[role=group]")[1]);
+    const [f1] = extractLiveFields(d.querySelectorAll("[role=group]")[0], { stamp: false });
+    const res = await applyFill([{ fieldId: f1.id, value: "Yes" }], d);
+    expect(res.missing).toEqual([]);
+    expect((d.getElementById("cw1") as HTMLInputElement).checked).toBe(true);
+    expect((d.getElementById("cw2") as HTMLInputElement).checked).toBe(false);
+  });
+
   it("reports missing fields and unmatched options", async () => {
     const d = doc(`<select id="s"><option>A</option></select>`);
     extractLiveFields(d);

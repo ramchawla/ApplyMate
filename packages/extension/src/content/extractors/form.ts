@@ -213,13 +213,12 @@ export function extractLiveFields(
     if (htmlType === "checkbox" && el.parentElement && toggleButtons(el.parentElement).length) continue;
 
     const input = el as HTMLInputElement;
+    // Scoped to `root`, not the whole page: a repeating section can reuse
+    // the same name in every entry (Workday's "currentlyWorkHere" on every
+    // Work Experience row) — those are separate questions, not one group.
     const groupInputs =
       (htmlType === "radio" || htmlType === "checkbox") && input.name
-        ? Array.from(
-            rootOf(el).querySelectorAll<HTMLInputElement>(
-              `input[type=${htmlType}][name="${cssEscape(input.name)}"]`,
-            ),
-          )
+        ? deepQueryAll<HTMLInputElement>(root, `input[type=${htmlType}][name="${cssEscape(input.name)}"]`)
         : [];
     const isGroup = htmlType === "radio" ? groupInputs.length > 0 : groupInputs.length > 1;
     if (isGroup) {
