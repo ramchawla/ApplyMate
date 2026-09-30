@@ -105,6 +105,19 @@ function entriesOf(section: Element, re: RegExp): Element[] {
   });
 }
 
+// Real Workday adds a section entry over the network (seconds, not a
+// synchronous DOM insert); give it room before assuming the press failed.
+const ADD_WAIT_MS = 12_000;
+const FIELDS_WAIT_MS = 3_000;
+
+async function waitUntil(check: () => boolean, ms: number): Promise<boolean> {
+  for (let waited = 0; !check(); waited += 50) {
+    if (waited >= ms) return false;
+    await sleep(50);
+  }
+  return true;
+}
+
 async function addUntil(section: Element, spec: SectionSpec, want: number): Promise<number> {
   let added = 0;
   while (entriesOf(section, spec.entry).length < want) {
@@ -112,12 +125,7 @@ async function addUntil(section: Element, spec: SectionSpec, want: number): Prom
     if (!btn) break;
     const before = entriesOf(section, spec.entry).length;
     press(btn);
-    let grew = false;
-    for (let t = 0; t < 60 && !grew; t++) {
-      grew = entriesOf(section, spec.entry).length > before;
-      if (!grew) await sleep(50);
-    }
-    if (!grew) break;
+    if (!(await waitUntil(() => entriesOf(section, spec.entry).length > before, ADD_WAIT_MS))) break;
     added++;
   }
   return added;
@@ -182,6 +190,9 @@ export async function fillWorkdaySections(
       const entries = entriesOf(section, spec.entry);
       for (const [i, entry] of entries.entries()) {
         const item = items[i];
+        // The entry's heading can commit a render ahead of its own inputs
+        // (real Workday); give those a moment before reading it as empty.
+        await waitUntil(() => extractLiveFields(entry, { stamp: false }).length > 0, FIELDS_WAIT_MS);
         const all = extractLiveFields(entry);
         owned.push(...all.map((f) => f.id));
         const fields = all.filter((f) => !findField(doc, f.id)?.matches(DATE_INPUT));

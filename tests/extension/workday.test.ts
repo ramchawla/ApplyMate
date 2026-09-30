@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   isWorkday,
   fillWorkdaySections,
@@ -166,6 +166,55 @@ describe("Workday adapter", () => {
     expect(val(d, "w1-title")).toBe("Senior Software Engineer");
     expect(val(d, "w2-title")).toBe("Software Engineer");
     expect(report.filled).toBeGreaterThan(10);
+  });
+});
+
+describe("Workday adapter — slow, network-backed real Workday", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("waits long enough for a slow Add response before giving up", async () => {
+    vi.useFakeTimers();
+    const d = document.implementation.createHTMLDocument("t");
+    d.body.innerHTML = `<div role="group"><h4>Work Experience</h4><button data-automation-id="add-button">Add</button></div>`;
+    const box = d.querySelector("[role=group]")!;
+    box.querySelector("button")!.addEventListener("click", () => {
+      // Real Workday: a network round trip before the entry renders.
+      setTimeout(() => {
+        const entry = d.createElement("div");
+        entry.setAttribute("role", "group");
+        entry.innerHTML = `<h4>Work Experience 1</h4><label for="t">Job Title</label><input id="t">`;
+        box.insertBefore(entry, box.querySelector("button"));
+      }, 6000);
+    });
+    const onlyWork = { ...profile, work: [profile.work[0]], education: [] };
+    const promise = fillWorkdaySections(d, onlyWork, () => false);
+    await vi.advanceTimersByTimeAsync(7000);
+    const res = await promise;
+    expect(res.added).toBe(1);
+    expect(val(d, "t")).toBe("Senior Software Engineer");
+  });
+
+  it("waits for an entry's fields to render before giving up on filling it", async () => {
+    vi.useFakeTimers();
+    const d = document.implementation.createHTMLDocument("t");
+    d.body.innerHTML = `<div role="group"><h4>Education</h4><button data-automation-id="add-button">Add</button></div>`;
+    const box = d.querySelector("[role=group]")!;
+    const addBtn = box.querySelector("button")!;
+    addBtn.addEventListener("click", () => {
+      // The heading commits first; the entry's own inputs render a beat later.
+      const entry = d.createElement("div");
+      entry.setAttribute("role", "group");
+      entry.innerHTML = `<h4>Education 1</h4>`;
+      box.insertBefore(entry, addBtn);
+      setTimeout(() => {
+        entry.insertAdjacentHTML("beforeend", `<label for="sch">School or University</label><input id="sch">`);
+      }, 800);
+    });
+    const oneSchool = { ...profile, work: [], education: [{ school: "Test U", degree: "", major: "", gpa: "", start: "", end: "" }] };
+    const promise = fillWorkdaySections(d, oneSchool, () => false);
+    await vi.advanceTimersByTimeAsync(2000);
+    await promise;
+    expect(val(d, "sch")).toBe("Test U");
   });
 });
 
