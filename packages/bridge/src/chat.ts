@@ -92,25 +92,38 @@ export function makeChat(opts: {
     const isApplied = (msg.applied ?? []).includes(ref.proposalIndex);
     if (!ref.undo && isApplied) return { ok: true, state: run.state, version: run.state.version };
     if (ref.undo && !isApplied) return { ok: false, reason: "not applied" };
+    const doc = parseResume(run.masterTex);
+    const part = doc.parts.find((x) => x.id === p.target);
+    const isAnswer = p.target.startsWith("answer:");
+    if (p.target !== "cover-letter" && !isAnswer && !part) return { ok: false, reason: "unknown target" };
+    // Undo only puts back `before` while the target still holds this proposal's text.
+    const currentValue =
+      p.target === "cover-letter"
+        ? run.state.coverLetter
+        : isAnswer
+          ? (run.state.answers[p.target.slice("answer:".length)] ?? "")
+          : (run.state.edits[p.target] ?? part!.text);
+    if (ref.undo && currentValue !== p.after) {
+      return { ok: false, reason: "changed since — undo the newer change" };
+    }
     const value = ref.undo ? p.before : p.after;
 
-    // Compute + write files first; state/chat are committed only once everything succeeded.
+    // Compute first; files, state and chat are written only once everything succeeded.
     let change: (s: RunState) => void;
     let resumeTex: string | undefined;
+    const files: [string, string | Buffer][] = [];
     if (p.target === "cover-letter") {
       if (run.report.wantCoverLetterPdf) {
         const { first, last } = profileName(optional(join(opts.dir, "profile.yaml")));
         const c = await compile(coverLetterTex(`${first} ${last}`.trim(), value));
-        writeFileSync(join(run.dir, "cover-letter.pdf"), c.pdf);
+        files.push(["cover-letter.pdf", c.pdf]);
       }
-      writeFileSync(join(run.dir, "cover-letter.md"), value, "utf8");
+      files.push(["cover-letter.md", value]);
       change = (s) => (s.coverLetter = value);
-    } else if (p.target.startsWith("answer:")) {
+    } else if (isAnswer) {
       const fieldId = p.target.slice("answer:".length);
       change = (s) => (s.answers = { ...s.answers, [fieldId]: value });
     } else {
-      const doc = parseResume(run.masterTex);
-      if (!doc.parts.some((x) => x.id === p.target)) return { ok: false, reason: "unknown target" };
       const tex = renderResume(doc, { ...run.state.edits, [p.target]: value }, run.state.order);
       const c = await compile(tex);
       const budget = fitBudget(
@@ -123,8 +136,7 @@ export function makeChat(opts: {
         return { ok: false, reason: `${lines} line${lines === 1 ? "" : "s"} too long` };
       }
       compiled.set(`${runId}:current`, { tex, c });
-      writeFileSync(join(run.dir, "resume.tex"), tex, "utf8");
-      writeFileSync(join(run.dir, "resume.pdf"), c.pdf);
+      files.push(["resume.tex", tex], ["resume.pdf", c.pdf]);
       resumeTex = tex;
       change = (s) => (s.edits = { ...s.edits, [p.target]: value });
     }
@@ -134,11 +146,19 @@ export function makeChat(opts: {
     const state = fresh.state;
     change(state);
     state.version += 1;
+    // Only the proposal now in effect on a target stays marked: applying one
+    // un-marks every other proposal on the same target.
+    fresh.chat.forEach((m, mi) => {
+      if (!m.applied) return;
+      m.applied = m.applied.filter(
+        (i) =>
+          !(mi === ref.messageIndex && i === ref.proposalIndex) &&
+          (ref.undo || m.proposals?.[i]?.target !== p.target),
+      );
+    });
     const m = fresh.chat[ref.messageIndex];
-    const applied = m.applied ?? [];
-    m.applied = ref.undo
-      ? applied.filter((i) => i !== ref.proposalIndex)
-      : [...applied, ref.proposalIndex];
+    if (!ref.undo) m.applied = [...(m.applied ?? []), ref.proposalIndex];
+    for (const [name, data] of files) writeFileSync(join(fresh.dir, name), data);
     writeState(fresh.dir, state);
     writeChat(fresh.dir, fresh.chat);
 

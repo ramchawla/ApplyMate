@@ -337,6 +337,49 @@ describe("makeChat.apply", () => {
     expect(readFileSync(join(runDir, "resume.tex"), "utf8")).toContain(masterSummary);
   });
 
+  it("two proposals on the summary: only the one in effect stays marked; undo can't wipe a newer edit", async () => {
+    const s = await setup();
+    const X = { target: "summary", after: "Summary X.", why: "" };
+    const Y = { target: "summary", after: "Summary Y.", why: "" };
+    const replies = [reply("A.", [X]), reply("B.", [Y])];
+    const chat = makeChat({
+      appsDir: s.appsDir,
+      dir: s.dir,
+      stream: async () => replies.shift()!,
+      compile: fakeCompile,
+    });
+    await collect(chat, "a");
+    expect(await chat.apply(RUN_ID, { messageIndex: 1, proposalIndex: 0 })).toMatchObject({ ok: true, version: 1 });
+    await collect(chat, "b");
+    expect(readRun(s.runDir).chat[3].proposals![0].before).toBe("Summary X.");
+    expect(await chat.apply(RUN_ID, { messageIndex: 3, proposalIndex: 0 })).toMatchObject({ ok: true, version: 2 });
+    let run = readRun(s.runDir);
+    expect(run.chat[1].applied).toEqual([]);
+    expect(run.chat[3].applied).toEqual([0]);
+
+    // A is no longer in effect: undo refuses, re-apply really applies.
+    expect(await chat.apply(RUN_ID, { messageIndex: 1, proposalIndex: 0, undo: true })).toEqual({
+      ok: false,
+      reason: "not applied",
+    });
+    expect(await chat.apply(RUN_ID, { messageIndex: 1, proposalIndex: 0 })).toMatchObject({ ok: true, version: 3 });
+    run = readRun(s.runDir);
+    expect(run.state.edits.summary).toBe("Summary X.");
+    expect(run.chat[1].applied).toEqual([0]);
+    expect(run.chat[3].applied).toEqual([]);
+
+    // Something else changed the summary since A was applied: undo refuses.
+    writeFileSync(
+      join(s.runDir, "state.json"),
+      JSON.stringify({ ...run.state, edits: { summary: "Changed elsewhere." } }),
+    );
+    expect(await chat.apply(RUN_ID, { messageIndex: 1, proposalIndex: 0, undo: true })).toEqual({
+      ok: false,
+      reason: "changed since — undo the newer change",
+    });
+    expect(readRun(s.runDir).state.edits.summary).toBe("Changed elsewhere.");
+  });
+
   it("unknown proposal → not ok", async () => {
     const { chat } = await chatWith([SUMMARY_PROPOSAL]);
     expect(await chat.apply(RUN_ID, { messageIndex: 0, proposalIndex: 0 })).toEqual({
