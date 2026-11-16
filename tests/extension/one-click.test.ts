@@ -115,7 +115,7 @@ describe("runOneClick", () => {
                     { fieldId: "q1", value: "Because platforms." },
                     { fieldId: "q2", value: "Yes" },
                   ],
-                  keywords: { injected: [{ keyword: "go", where: "r0.b0" }], skipped: [] },
+                  keywords: { present: [], injected: [{ keyword: "go", where: "r0.b0" }], skipped: [] },
                   edits: [],
                   warnings: [],
                   pages: 1,
@@ -214,7 +214,7 @@ describe("runOneClick", () => {
       doc: d, fields: extractLiveFields(d), keywords: [], pollMs: 1, settleMs: 1,
       jd: { url: "u", title: "", company: "", description: "" }, jdSource: "none",
       send: async (msg: any) => msg.type === "GET_PROFILE" ? normalizeProfile({}) : msg.type === "TAILOR_START" ? { jobId: "J" }
-        : msg.type === "TAILOR_POLL" ? { status: "done", result: { applicationId: "a", fileName: "R.pdf", coverLetter: "", hasCoverLetterPdf: false, answers: [], keywords: { injected: [], skipped: [] }, edits: [], warnings: [], pages: 1, savedTo: "/x" } }
+        : msg.type === "TAILOR_POLL" ? { status: "done", result: { applicationId: "a", fileName: "R.pdf", coverLetter: "", hasCoverLetterPdf: false, answers: [], keywords: { present: [], injected: [], skipped: [] }, edits: [], warnings: [], pages: 1, savedTo: "/x" } }
         : msg.type === "FETCH_PDF" ? { base64: btoa("%PDF") } : { ok: true },
       onStatus: () => {},
     });
@@ -244,7 +244,7 @@ describe("runOneClick", () => {
             return { status: "running" };
           }
           return { status: "done", result: { applicationId: "a", fileName: "R.pdf", coverLetter: "", hasCoverLetterPdf: false,
-            answers: [{ fieldId: "q1", value: "Claude's answer." }], keywords: { injected: [], skipped: [] }, edits: [], warnings: [], pages: 1, savedTo: "/x" } };
+            answers: [{ fieldId: "q1", value: "Claude's answer." }], keywords: { present: [], injected: [], skipped: [] }, edits: [], warnings: [], pages: 1, savedTo: "/x" } };
         }
         return { ok: true };
       },

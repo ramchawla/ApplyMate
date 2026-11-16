@@ -186,3 +186,20 @@ export function renderResume(
   }
   return out;
 }
+
+// Human-readable name per part id, so UI never shows raw ids (r1.b2).
+export function partLabels(doc: ResumeDoc): Record<string, string> {
+  const labels: Record<string, string> = {};
+  for (const g of doc.groups) {
+    const name = g.heading.split(" | ")[0];
+    g.bulletIds.forEach((id, i) => (labels[id] = `${name} · bullet ${i + 1}`));
+  }
+  for (const p of doc.parts) {
+    if (p.kind === "summary") labels[p.id] = "Summary";
+    else if (p.kind === "skills") {
+      const name = doc.tex.slice(0, p.start).match(/\\textbf\{([^{}]+)\}\{[:\s]*$/)?.[1];
+      labels[p.id] = `Skills · ${name ?? p.id.replace("skills.", "")}`;
+    }
+  }
+  return labels;
+}

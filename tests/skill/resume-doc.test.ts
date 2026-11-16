@@ -8,6 +8,7 @@ import {
   renderResume,
   isPermutation,
   matchBrace,
+  partLabels,
 } from "../../packages/skill/src/tailor/resume-doc";
 
 const tex = readFileSync(
@@ -111,5 +112,15 @@ describe("real master resume (local only)", () => {
     const bullets = doc.parts.filter((p) => p.kind === "bullet").length;
     expect(bullets).toBe(itemCount - 1); // minus the education cert line
     expect(doc.parts.some((p) => p.id === "summary")).toBe(true);
+  });
+});
+
+describe("partLabels", () => {
+  it("labels every part without ids", () => {
+    const labels = partLabels(parseResume(tex));
+    expect(labels["summary"]).toBe("Summary");
+    expect(labels["r0.b0"]).toBe("Acme Corp · bullet 1");
+    expect(labels["skills.languages"]).toBe("Skills · Languages");
+    expect(Object.values(labels).some((l) => /r\d+\.b\d+/.test(l))).toBe(false);
   });
 });

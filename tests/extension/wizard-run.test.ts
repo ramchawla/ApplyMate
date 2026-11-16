@@ -44,7 +44,7 @@ function wizard(steps: string[]) {
 
 const RESULT = {
   applicationId: "a", fileName: "Jane_Dev_Acme.pdf", coverLetter: "Dear", hasCoverLetterPdf: false,
-  answers: [], keywords: { injected: [], skipped: [] }, edits: [], warnings: [], pages: 1, savedTo: "/x",
+  answers: [], keywords: { present: [], injected: [], skipped: [] }, edits: [], warnings: [], pages: 1, savedTo: "/x",
 };
 const profile = normalizeProfile({ name: { first: "Jane", last: "Dev" }, email: "j@x.com" });
 

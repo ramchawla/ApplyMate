@@ -82,6 +82,7 @@ export interface TailorRequest {
 }
 
 export interface KeywordReport {
+  present: { keyword: string; where: string }[];
   injected: { keyword: string; where: string }[];
   skipped: { keyword: string; reason: string }[];
 }

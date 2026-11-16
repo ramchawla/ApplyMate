@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { tailorResume } from "../../packages/skill/src/tailor/run";
 import { coverLetterTex, escapeLatex } from "../../packages/skill/src/tailor/letter";
+import { parseResume } from "../../packages/skill/src/tailor/resume-doc";
 import type { TailorRequest } from "../../lib/shared/types";
 
 const masterTex = readFileSync(
@@ -57,6 +58,21 @@ describe("tailorResume", () => {
     expect(out.answers).toEqual([{ fieldId: "why", value: "Because." }]);
     expect(out.warnings).toEqual([]);
     expect(out.coverLetterPdf).toBeUndefined();
+  });
+
+  it("returns the order it rendered", async () => {
+    const ids = parseResume(masterTex).groups[0].bulletIds;
+    const reversed = [...ids].reverse();
+    const out = await tailorResume(req, files, {
+      compile: onePage,
+      runClaude: runner({ order: [{ role: "r0", ids: reversed }] }),
+    });
+    expect(out.order).toEqual({ r0: reversed });
+    const bogus = await tailorResume(req, files, {
+      compile: onePage,
+      runClaude: runner({ order: [{ role: "r0", ids: ["x"] }] }),
+    });
+    expect(bogus.order).toEqual({});
   });
 
   it("reverts LaTeX-breaking edits and ignores unknown ids, with warnings", async () => {

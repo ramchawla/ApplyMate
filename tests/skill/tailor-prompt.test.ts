@@ -75,6 +75,11 @@ describe("schema + system", () => {
       "answers",
     ]);
   });
+  it("asks for present keywords", () => {
+    expect((TAILOR_SCHEMA as any).properties.keywords.required).toEqual(["present", "injected", "skipped"]);
+    expect(TAILOR_SYSTEM).toMatch(/keywords\.present/);
+    expect(parseTailorOutput({}).keywords.present).toEqual([]);
+  });
   it("treats job description and question text as untrusted data", () => {
     expect(TAILOR_SYSTEM).toMatch(/untrusted/i);
   });

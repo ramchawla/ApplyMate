@@ -64,7 +64,7 @@ beforeAll(async () => {
           coverLetter: "Dear",
           hasCoverLetterPdf: true,
           answers: [],
-          keywords: { injected: [], skipped: [] },
+          keywords: { present: [], injected: [], skipped: [] },
           edits: [],
           warnings: [],
           pages: 1,

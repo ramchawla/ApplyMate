@@ -43,6 +43,7 @@ RESUME EDITS
 - LaTeX: keep the existing \\textbf{} emphasis style; escape % & $ # _ as \\% \\& \\$ \\# \\_; keep braces balanced; no new macros or environments.
 - Skills lines: reorder to front-load what the job emphasizes. Do not remove items; add an item only if the corpus evidences it.
 - order: for any role (r0, r1, ...) you may give a permutation of all of its bullet ids, most job-relevant first. Omit roles you leave as-is.
+- keywords.present: important job keywords the resume already covered before your edits, and the id where each appears.
 - keywords.injected: each keyword you worked in and the id where it now appears. keywords.skipped: important job or priority keywords you did not use, each with a short honest reason (e.g. "no experience in corpus").
 
 COVER LETTER
@@ -64,6 +65,7 @@ export const TAILOR_SCHEMA = obj({
   edits: { type: "array", items: obj({ id: str, latex: str }) },
   order: { type: "array", items: obj({ role: str, ids: { type: "array", items: str } }) },
   keywords: obj({
+    present: { type: "array", items: obj({ keyword: str, where: str }) },
     injected: { type: "array", items: obj({ keyword: str, where: str }) },
     skipped: { type: "array", items: obj({ keyword: str, reason: str }) },
   }),
@@ -135,6 +137,11 @@ function stripIdLabel(id: string, latex: string): string {
 const arr = (v: unknown): Record<string, unknown>[] =>
   Array.isArray(v) ? v.filter((x) => x && typeof x === "object") : [];
 
+const kwList = (v: unknown) =>
+  arr(v)
+    .filter((k) => isStr(k.keyword))
+    .map((k) => ({ keyword: k.keyword as string, where: isStr(k.where) ? k.where : "" }));
+
 // Schema validation happens in the CLI; this is defense in depth so a
 // malformed field degrades to "no change" instead of a crash.
 export function parseTailorOutput(raw: unknown): ClaudeTailorOutput {
@@ -156,9 +163,8 @@ export function parseTailorOutput(raw: unknown): ClaudeTailorOutput {
       .filter((o) => isStr(o.role) && Array.isArray(o.ids) && o.ids.every(isStr))
       .map((o) => ({ role: o.role as string, ids: o.ids as string[] })),
     keywords: {
-      injected: arr(kw.injected)
-        .filter((k) => isStr(k.keyword))
-        .map((k) => ({ keyword: k.keyword as string, where: isStr(k.where) ? k.where : "" })),
+      present: kwList(kw.present),
+      injected: kwList(kw.injected),
       skipped: arr(kw.skipped)
         .filter((k) => isStr(k.keyword))
         .map((k) => ({ keyword: k.keyword as string, reason: isStr(k.reason) ? k.reason : "" })),

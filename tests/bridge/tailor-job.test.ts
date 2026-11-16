@@ -32,7 +32,7 @@ describe("makeTailorJob", () => {
       runner: async () => ({
         edits: [],
         order: [],
-        keywords: { injected: [], skipped: [{ keyword: "rust", reason: "none" }] },
+        keywords: { present: [], injected: [], skipped: [{ keyword: "rust", reason: "none" }] },
         coverLetter: "Dear Hiring Team,",
         answers: [{ fieldId: "q", value: "A" }],
       }),
@@ -63,7 +63,7 @@ describe("makeTailorJob", () => {
         job: { title: "Staff AI Engineer", company: "BSC Analytics" },
         edits: [],
         order: [],
-        keywords: { injected: [], skipped: [] },
+        keywords: { present: [], injected: [], skipped: [] },
         coverLetter: "",
         answers: [],
       }),

@@ -1,4 +1,4 @@
-import { parseResume, renderResume } from "./resume-doc";
+import { parseResume, renderResume, isPermutation } from "./resume-doc";
 import { latexProblem, editWarnings, keywordWarnings, droppedItems } from "./checks";
 import { buildTailorPrompt, parseTailorOutput, TAILOR_SCHEMA, TAILOR_SYSTEM } from "./prompt";
 import { coverLetterTex, profileName } from "./letter";
@@ -40,6 +40,8 @@ export interface TailorOutcome {
   coverLetterPdf?: Buffer;
   answers: { fieldId: string; value: string }[];
   keywords: KeywordReport;
+  // Only valid permutations that were rendered.
+  order: Record<string, string[]>;
   edits: EditRecord[];
   warnings: string[];
 }
@@ -102,7 +104,8 @@ export async function tailorResume(
   for (const o of out.order) {
     const group = doc.groups.find((g) => g.id === o.role);
     if (!group) warnings.push(`Ignored a reorder for unknown role ${o.role}`);
-    else order[o.role] = o.ids; // renderResume ignores non-permutations
+    else if (isPermutation(o.ids, group.bulletIds)) order[o.role] = o.ids;
+    else warnings.push(`Ignored a reorder for ${o.role}: not a permutation of its bullets`);
   }
 
   warnings.push(...keywordWarnings(out.keywords.injected, groundText));
@@ -182,6 +185,7 @@ export async function tailorResume(
     // otherwise overwrite profile fields on the page (email, honeypots).
     answers: out.answers.filter((a) => asked.has(a.fieldId)),
     keywords: out.keywords,
+    order,
     edits,
     warnings,
   };
