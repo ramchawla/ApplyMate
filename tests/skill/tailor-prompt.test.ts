@@ -67,6 +67,7 @@ describe("buildTailorPrompt", () => {
 describe("schema + system", () => {
   it("requires every output key", () => {
     expect((TAILOR_SCHEMA as { required: string[] }).required).toEqual([
+      "job",
       "edits",
       "order",
       "keywords",
@@ -106,6 +107,7 @@ describe("parseTailorOutput", () => {
       keywords: { injected: [{ keyword: "go", where: "r2.b0" }] },
     });
     expect(out.edits).toEqual([{ id: "r0.b0", latex: "x" }]);
+    expect(out.job).toEqual({ title: "", company: "" });
     expect(out.order).toEqual([]);
     expect(out.keywords.skipped).toEqual([]);
     expect(out.coverLetter).toBe("");

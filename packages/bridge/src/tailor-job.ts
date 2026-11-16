@@ -58,11 +58,15 @@ export function makeTailorJob(opts: {
       claudeCwd: opts.dir,
     });
 
+    // Page scraping often grabs a section heading or form step as the title;
+    // Claude's read of the JD is the better name, the page is the fallback.
+    const title = out.job.title || req.job.title;
+    const company = out.job.company || req.job.company;
     const { first, last } = profileName(files.profileYaml);
     const savedTo = join(
       opts.dir,
       "applications",
-      applicationDirName((opts.now ?? (() => new Date()))(), req.job.company, req.job.title),
+      applicationDirName((opts.now ?? (() => new Date()))(), company, title),
     );
     const report = {
       keywords: out.keywords,
@@ -82,8 +86,8 @@ export function makeTailorJob(opts: {
     const applicationId = opts.db
       ? persistOutput(opts.db, {
           jobUrl: req.job.url,
-          company: req.job.company,
-          jobTitle: req.job.title,
+          company,
+          jobTitle: title,
           resumeLatex: out.tex,
           coverLetter: out.coverLetter,
           rewritingReport: { overallConfidence: 1, perBullet: out.edits },
@@ -94,7 +98,7 @@ export function makeTailorJob(opts: {
     return {
       result: {
         applicationId,
-        fileName: resumeFileName(first, last, req.job.company, req.job.title),
+        fileName: resumeFileName(first, last, company, title),
         coverLetter: out.coverLetter,
         hasCoverLetterPdf: !!out.coverLetterPdf,
         answers: out.answers,

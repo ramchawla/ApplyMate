@@ -31,6 +31,8 @@ export interface TailorDeps {
 }
 
 export interface TailorOutcome {
+  // The posting's title/company as Claude read them from the JD ("" = unknown).
+  job: { title: string; company: string };
   tex: string;
   pdf: Buffer;
   pages: number;
@@ -170,6 +172,7 @@ export async function tailorResume(
   }
 
   return {
+    job: out.job,
     tex,
     pdf: compiled.pdf,
     pages: compiled.pages,

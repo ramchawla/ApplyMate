@@ -2,6 +2,7 @@ import type { ResumeDoc } from "./resume-doc";
 import type { KeywordReport, TailorQuestion, TailorRequest } from "../../../../lib/shared/types";
 
 export interface ClaudeTailorOutput {
+  job: { title: string; company: string };
   edits: { id: string; latex: string }[];
   order: { role: string; ids: string[] }[];
   keywords: KeywordReport;
@@ -29,6 +30,11 @@ export const TAILOR_SYSTEM = `You tailor one software engineer's LaTeX resume to
 
 ${UNTRUSTED_LINE}
 
+JOB
+- job.title: the position title exactly as the posting states it (e.g. "Staff AI Engineer, Agentic Systems"). The supplied Title is scraped from the page and is often wrong: a section heading ("Key Responsibilities"), a form step ("Step 1 of 3"), a button ("Apply") or a careers-page slogan. Prefer the title the job description itself gives.
+- job.company: the hiring company's name, not the job board or ATS.
+- Return "" for either when the job description does not say.
+
 RESUME EDITS
 - Edit only the ids listed under "Resume parts". Return an edit only for parts you change. The latex field is the new text only — never include the "[id]" label.
 - Work in keywords from the job description and the candidate's priority keywords wherever they honestly apply to the work already described. You may reframe adjacent real work in the job's vocabulary (e.g. "Kustomize overlays" -> "infrastructure as code"), but every claim must be supported by that bullet or by the experience corpus.
@@ -54,6 +60,7 @@ const obj = (props: Record<string, unknown>) => ({
 });
 
 export const TAILOR_SCHEMA = obj({
+  job: obj({ title: str, company: str }),
   edits: { type: "array", items: obj({ id: str, latex: str }) },
   order: { type: "array", items: obj({ role: str, ids: { type: "array", items: str } }) },
   keywords: obj({
@@ -136,7 +143,12 @@ export function parseTailorOutput(raw: unknown): ClaudeTailorOutput {
     string,
     unknown
   >;
+  const job = (r.job && typeof r.job === "object" ? r.job : {}) as Record<string, unknown>;
   return {
+    job: {
+      title: isStr(job.title) ? job.title.trim() : "",
+      company: isStr(job.company) ? job.company.trim() : "",
+    },
     edits: arr(r.edits)
       .filter((e) => isStr(e.id) && isStr(e.latex))
       .map((e) => ({ id: e.id as string, latex: stripIdLabel(e.id as string, e.latex as string) })),

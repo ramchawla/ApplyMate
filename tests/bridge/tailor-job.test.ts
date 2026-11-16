@@ -53,6 +53,33 @@ describe("makeTailorJob", () => {
     expect(existsSync(join(out.result.savedTo, "resume.pdf"))).toBe(true);
   });
 
+  it("names files from the JD's own title when the page scraped a heading", async () => {
+    const dir = appDir();
+    const job = makeTailorJob({
+      dir,
+      now: () => new Date("2026-11-16T10:00:00Z"),
+      compile: async (latex) => ({ pdf: Buffer.from(latex.slice(0, 5)), pages: 1 }),
+      runner: async () => ({
+        job: { title: "Staff AI Engineer", company: "BSC Analytics" },
+        edits: [],
+        order: [],
+        keywords: { injected: [], skipped: [] },
+        coverLetter: "",
+        answers: [],
+      }),
+    });
+    const out = await job({
+      job: { title: "Key Responsibilities", company: "company", url: "https://x/2", description: "JD" },
+      keywords: [],
+      fields: [],
+      wantCoverLetterPdf: false,
+    });
+    expect(out.result.fileName).toBe("Jane_Dev_BSC_Analytics_Staff_AI_Engineer.pdf");
+    expect(out.result.savedTo).toBe(
+      join(dir, "applications", "2026-11-16-bsc-analytics-staff-ai-engineer"),
+    );
+  });
+
   it("fails clearly when the master resume is missing", async () => {
     const dir = mkdtempSync(join(tmpdir(), "am-empty-"));
     const job = makeTailorJob({
