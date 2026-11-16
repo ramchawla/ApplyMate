@@ -157,6 +157,14 @@ export interface ChatMessage {
   at: number;
 }
 
+// One NDJSON line of a streamed chat turn (POST /chat/:runId).
+export type ChatEvent =
+  | { t: "delta"; text: string }
+  | { t: "done"; message: ChatMessage }
+  | { t: "error"; message: string };
+
+export type ApplyResult = { ok: true; state: RunState; version: number } | { ok: false; reason: string };
+
 export interface RunReport {
   url: string;
   title: string;

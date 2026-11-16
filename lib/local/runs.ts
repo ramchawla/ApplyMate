@@ -27,13 +27,14 @@ export async function writeRun(
   await mkdir(dir, { recursive: true });
   await Promise.all([
     writeFile(join(dir, "master.tex"), f.masterTex, "utf8"),
-    writeFile(join(dir, "report.json"), JSON.stringify(f.report, null, 2), "utf8"),
     writeFile(join(dir, "state.json"), JSON.stringify(f.state, null, 2), "utf8"),
     writeFile(join(dir, "resume.tex"), f.resumeTex, "utf8"),
     writeFile(join(dir, "resume.pdf"), f.resumePdf),
     writeFile(join(dir, "cover-letter.md"), f.coverLetter, "utf8"),
     writeFile(join(dir, "jd.md"), f.jd, "utf8"),
   ]);
+  // Last: report.json is what indexes a run, so a half-written folder is never found.
+  await writeFile(join(dir, "report.json"), JSON.stringify(f.report, null, 2), "utf8");
 }
 
 const readJson = (dir: string, file: string) =>
