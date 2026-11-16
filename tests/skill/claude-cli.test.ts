@@ -116,6 +116,32 @@ describe("streamClaude", () => {
     await expect(streamClaude({ ...base, onDelta: () => {} })).rejects.toThrow(/exit 1.*kaput/);
   });
 
+  it("keeps multibyte characters split across stdout chunks intact", async () => {
+    process.env.FAKE_CLAUDE_MODE = "stream-split";
+    const deltas: string[] = [];
+    expect(await streamClaude({ ...base, onDelta: (t) => deltas.push(t) })).toBe("a\u2014b");
+    expect(deltas).toEqual(["a\u2014b"]);
+  });
+
+  it("rejects (no uncaught exception) when onDelta throws", async () => {
+    process.env.FAKE_CLAUDE_MODE = "stream";
+    await expect(
+      streamClaude({
+        ...base,
+        onDelta: () => {
+          throw new Error("cb exploded");
+        },
+      }),
+    ).rejects.toThrow(/cb exploded/);
+  });
+
+  it("rejects on non-zero exit even when text was received", async () => {
+    process.env.FAKE_CLAUDE_MODE = "stream-partial-fail";
+    await expect(streamClaude({ ...base, onDelta: () => {} })).rejects.toThrow(
+      /claude failed \(exit 1\).*kaput/,
+    );
+  });
+
   it("rejects on timeout", async () => {
     process.env.FAKE_CLAUDE_MODE = "hang";
     await expect(

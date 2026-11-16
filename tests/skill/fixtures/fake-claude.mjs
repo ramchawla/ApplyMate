@@ -25,8 +25,25 @@ process.stdin.on("end", () => {
       out({ type: "result", is_error: true, result: "usage limit", subtype: "success" });
       return;
     }
+    if (mode === "stream-split") {
+      // one JSON line split mid multibyte char ("—" = E2 80 94) across two writes
+      const buf = Buffer.from(
+        JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "a—b" } } }) + "\n",
+      );
+      const cut = buf.indexOf(0xe2) + 1;
+      process.stdout.write(buf.subarray(0, cut));
+      setTimeout(() => {
+        process.stdout.write(buf.subarray(cut));
+        out({ type: "result", is_error: false, subtype: "success" });
+      }, 80);
+      return;
+    }
     delta("Hel");
     delta("lo");
+    if (mode === "stream-partial-fail") {
+      process.stderr.write("kaput");
+      process.exit(1);
+    }
     if (process.env.FAKE_CLAUDE_ECHO === "1")
       delta(JSON.stringify({ args: process.argv.slice(2), noClaudeMd: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS }));
     if (mode !== "stream-noresult") out({ type: "result", is_error: false, subtype: "success" });

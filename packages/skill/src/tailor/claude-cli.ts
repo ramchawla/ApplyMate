@@ -37,7 +37,15 @@ function baseArgs(opts: BaseOptions, format: string[]): string[] {
   ];
 }
 
-function spawnClaude(opts: BaseOptions, args: string[]) {
+// Spawns claude and wires the pieces both runners share: stdin EPIPE guard,
+// utf8 stdout (so multibyte chars split across chunks survive), ENOENT message,
+// and a settle-once `finish` plus timeout (SIGTERM + reject).
+function spawnClaude(
+  opts: BaseOptions,
+  args: string[],
+  timeoutMs: number,
+  reject: (err: Error) => void,
+) {
   const child = spawn(opts.bin ?? process.env.APPLYMATE_CLAUDE_BIN ?? "claude", args, {
     cwd: opts.cwd,
     env: {
@@ -48,13 +56,29 @@ function spawnClaude(opts: BaseOptions, args: string[]) {
     stdio: ["pipe", "pipe", "pipe"],
   });
   child.stdin.on("error", () => {}); // EPIPE when the binary is missing/dies early
-  return child;
+  child.stdout.setEncoding("utf8");
+  let settled = false;
+  const finish = (fn: () => void) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    fn();
+  };
+  const timer = setTimeout(() => {
+    child.kill("SIGTERM");
+    finish(() => reject(new Error(`claude timed out after ${Math.round(timeoutMs / 1000)}s`)));
+  }, timeoutMs);
+  child.on("error", (err: NodeJS.ErrnoException) =>
+    finish(() =>
+      reject(
+        err.code === "ENOENT"
+          ? new Error("claude CLI not found on PATH — install Claude Code and log in")
+          : err,
+      ),
+    ),
+  );
+  return { child, finish, isSettled: () => settled };
 }
-
-const missingBin = (err: NodeJS.ErrnoException) =>
-  err.code === "ENOENT"
-    ? new Error("claude CLI not found on PATH — install Claude Code and log in")
-    : err;
 
 // Headless Claude Code on the user's subscription — never the paid API.
 // --bare is deliberately absent: it forces ANTHROPIC_API_KEY auth. Context is
@@ -64,30 +88,20 @@ const missingBin = (err: NodeJS.ErrnoException) =>
 export const runClaude: ClaudeRunner = (opts) =>
   new Promise((resolve, reject) => {
     const timeoutMs = opts.timeoutMs ?? 180_000;
-    const child = spawnClaude(opts, [
-      ...baseArgs(opts, ["--output-format", "json"]),
-      "--json-schema", JSON.stringify(opts.schema),
-    ]);
+    const { child, finish } = spawnClaude(
+      opts,
+      [
+        ...baseArgs(opts, ["--output-format", "json"]),
+        "--json-schema", JSON.stringify(opts.schema),
+      ],
+      timeoutMs,
+      reject,
+    );
 
     let stdout = "";
     let stderr = "";
-    let settled = false;
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      fn();
-    };
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      finish(() =>
-        reject(new Error(`claude timed out after ${Math.round(timeoutMs / 1000)}s`)),
-      );
-    }, timeoutMs);
-
     child.stdout.on("data", (d) => (stdout += d));
     child.stderr.on("data", (d) => (stderr += d));
-    child.on("error", (err: NodeJS.ErrnoException) => finish(() => reject(missingBin(err))));
     child.on("close", (code) =>
       finish(() => {
         try {
@@ -117,30 +131,19 @@ export type StreamRunner = (opts: StreamOptions) => Promise<string>;
 export const streamClaude: StreamRunner = (opts) =>
   new Promise((resolve, reject) => {
     const timeoutMs = opts.timeoutMs ?? 120_000;
-    const child = spawnClaude(
+    const { child, finish, isSettled } = spawnClaude(
       opts,
       baseArgs(opts, [
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
       ]),
+      timeoutMs,
+      reject,
     );
 
     let buf = "";
     let text = "";
     let stderr = "";
     let failure: string | undefined;
-    let settled = false;
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      fn();
-    };
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      finish(() =>
-        reject(new Error(`claude timed out after ${Math.round(timeoutMs / 1000)}s`)),
-      );
-    }, timeoutMs);
 
     const onLine = (line: string) => {
       let ev: {
@@ -159,7 +162,13 @@ export const streamClaude: StreamRunner = (opts) =>
         const d = ev.event?.delta;
         if (d?.type === "text_delta" && d.text) {
           text += d.text;
-          opts.onDelta(d.text);
+          if (isSettled()) return; // timed out / already failed: no more callbacks
+          try {
+            opts.onDelta(d.text);
+          } catch (err) {
+            child.kill("SIGTERM");
+            finish(() => reject(err instanceof Error ? err : new Error(String(err))));
+          }
         }
       } else if (ev.type === "result" && ev.is_error) {
         failure = `claude error: ${String(ev.result ?? ev.subtype ?? "unknown")}`;
@@ -175,14 +184,13 @@ export const streamClaude: StreamRunner = (opts) =>
       }
     });
     child.stderr.on("data", (d) => (stderr += d));
-    child.on("error", (err: NodeJS.ErrnoException) => finish(() => reject(missingBin(err))));
     child.on("close", (code) => {
       if (buf.trim()) onLine(buf); // last line without trailing newline
       finish(() => {
         if (failure) return reject(new Error(failure));
         if (code) {
           const detail = stderr.trim() ? `: ${stderr.trim().slice(-400)}` : "";
-          return reject(new Error(`claude produced no output (exit ${code})${detail}`));
+          return reject(new Error(`claude failed (exit ${code})${detail}`));
         }
         if (!text) return reject(new Error("claude returned no text"));
         resolve(text);
