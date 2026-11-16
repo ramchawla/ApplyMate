@@ -105,6 +105,56 @@ export interface TailorResult {
   warnings: string[];
   pages: number;
   savedTo: string;
+  runId: string;
+  labels: Record<string, string>;
+  questions: TailorQuestion[];
+  // Applied changes within this run (0 = the tailoring output).
+  version: number;
+}
+
+// ---- Run folders (~/.applymate/applications/<dir>/) ----
+
+// report.json: what the tailoring run produced; never rewritten by chat.
+export interface RunFile {
+  applicationId: string;
+  runId: string;
+  createdAt: string;
+  job: { title: string; company: string; url: string };
+  fileName: string;
+  wantCoverLetterPdf: boolean;
+  labels: Record<string, string>;
+  questions: TailorQuestion[];
+  keywords: KeywordReport;
+  edits: EditRecord[];
+  warnings: string[];
+  pages: number;
+}
+
+// state.json: the current overlay on master.tex that chat edits.
+export interface RunState {
+  edits: Record<string, string>;
+  order: Record<string, string[]>;
+  coverLetter: string;
+  answers: Record<string, string>;
+  questions: TailorQuestion[];
+  version: number;
+}
+
+export interface Proposal {
+  target: string;
+  label: string;
+  before: string;
+  after: string;
+  why: string;
+  warnings: string[];
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  text: string;
+  proposals?: Proposal[];
+  applied?: number[];
+  at: number;
 }
 
 export interface RunReport {

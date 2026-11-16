@@ -1,5 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   insertApplication,
@@ -73,20 +71,6 @@ function slug(s: string): string {
 
 export function applicationDirName(date: Date, company: string, title: string): string {
   return [date.toISOString().slice(0, 10), slug(company) || "company", slug(title) || "role"].join("-");
-}
-
-export async function saveApplicationFiles(
-  dir: string,
-  f: { resumeTex: string; resumePdf: Buffer; coverLetter: string; report: unknown; jd: string },
-): Promise<void> {
-  await mkdir(dir, { recursive: true });
-  await Promise.all([
-    writeFile(join(dir, "resume.tex"), f.resumeTex, "utf8"),
-    writeFile(join(dir, "resume.pdf"), f.resumePdf),
-    writeFile(join(dir, "cover-letter.md"), f.coverLetter, "utf8"),
-    writeFile(join(dir, "report.json"), JSON.stringify(f.report, null, 2), "utf8"),
-    writeFile(join(dir, "jd.md"), f.jd, "utf8"),
-  ]);
 }
 
 // Same id the tailor run used for this URL, so status lands on that row.

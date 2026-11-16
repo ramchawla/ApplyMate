@@ -1,9 +1,12 @@
 import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { Db } from "../../../lib/local/db";
 import type { TailorRequest, TailorResult } from "../../../lib/shared/types";
 import { compileLatexWithPages } from "../../../lib/local/compile-latex";
+import { uniqueRunDir, writeRun } from "../../../lib/local/runs";
 import { tailorResume, type TailorDeps } from "../../skill/src/tailor/run";
+import { parseResume, partLabels } from "../../skill/src/tailor/resume-doc";
 import { runClaude, type ClaudeRunner } from "../../skill/src/tailor/claude-cli";
 import { profileName } from "../../skill/src/tailor/letter";
 import { answerQuestions, type AnswerRequest } from "../../skill/src/tailor/answer";
@@ -11,7 +14,6 @@ import {
   applicationDirName,
   deterministicAppId,
   persistOutput,
-  saveApplicationFiles,
 } from "./persist";
 
 export interface TailorJobResult {
@@ -63,25 +65,8 @@ export function makeTailorJob(opts: {
     const title = out.job.title || req.job.title;
     const company = out.job.company || req.job.company;
     const { first, last } = profileName(files.profileYaml);
-    const savedTo = join(
-      opts.dir,
-      "applications",
-      applicationDirName((opts.now ?? (() => new Date()))(), company, title),
-    );
-    const report = {
-      keywords: out.keywords,
-      edits: out.edits,
-      warnings: out.warnings,
-      answers: out.answers,
-      pages: out.pages,
-    };
-    await saveApplicationFiles(savedTo, {
-      resumeTex: out.tex,
-      resumePdf: out.pdf,
-      coverLetter: out.coverLetter,
-      report,
-      jd: req.job.description,
-    });
+    const fileName = resumeFileName(first, last, company, title);
+    const now = (opts.now ?? (() => new Date()))();
 
     const applicationId = opts.db
       ? persistOutput(opts.db, {
@@ -95,10 +80,44 @@ export function makeTailorJob(opts: {
         }).applicationId
       : deterministicAppId(req.job.url);
 
+    const runId = randomUUID();
+    const labels = partLabels(parseResume(masterTex));
+    const appsDir = join(opts.dir, "applications");
+    const savedTo = uniqueRunDir(appsDir, applicationDirName(now, company, title));
+    await writeRun(savedTo, {
+      report: {
+        applicationId,
+        runId,
+        createdAt: now.toISOString(),
+        job: { title, company, url: req.job.url },
+        fileName,
+        wantCoverLetterPdf: req.wantCoverLetterPdf,
+        labels,
+        questions: req.fields,
+        keywords: out.keywords,
+        edits: out.edits,
+        warnings: out.warnings,
+        pages: out.pages,
+      },
+      state: {
+        edits: Object.fromEntries(out.edits.filter((e) => !e.reverted).map((e) => [e.id, e.after])),
+        order: out.order,
+        coverLetter: out.coverLetter,
+        answers: Object.fromEntries(out.answers.map((a) => [a.fieldId, a.value])),
+        questions: req.fields,
+        version: 0,
+      },
+      masterTex,
+      resumeTex: out.tex,
+      resumePdf: out.pdf,
+      coverLetter: out.coverLetter,
+      jd: req.job.description,
+    });
+
     return {
       result: {
         applicationId,
-        fileName: resumeFileName(first, last, company, title),
+        fileName,
         coverLetter: out.coverLetter,
         hasCoverLetterPdf: !!out.coverLetterPdf,
         answers: out.answers,
@@ -107,6 +126,10 @@ export function makeTailorJob(opts: {
         warnings: out.warnings,
         pages: out.pages,
         savedTo,
+        runId,
+        labels,
+        questions: req.fields,
+        version: 0,
       },
       resumePdf: out.pdf,
       coverLetterPdf: out.coverLetterPdf,

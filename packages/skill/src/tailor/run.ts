@@ -164,6 +164,8 @@ export async function tailorResume(
     );
     tex = files.masterTex;
     compiled = master;
+    // The master went out unchanged, so no order was rendered either.
+    for (const role of Object.keys(order)) delete order[role];
   }
 
   let coverLetterPdf: Buffer | undefined;

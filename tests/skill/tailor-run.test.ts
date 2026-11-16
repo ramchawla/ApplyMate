@@ -221,9 +221,13 @@ describe("tailorResume", () => {
         if (latex !== masterTex) throw new Error("tectonic failed: boom");
         return { pdf: Buffer.from("master"), pages: 1 };
       },
-      runClaude: runner({ edits: [{ id: "r0.b0", latex: "Fine text" }] }),
+      runClaude: runner({
+        edits: [{ id: "r0.b0", latex: "Fine text" }],
+        order: [{ role: "r0", ids: [...parseResume(masterTex).groups[0].bulletIds].reverse() }],
+      }),
     });
     expect(out.tex).toBe(masterTex);
+    expect(out.order).toEqual({});
     expect(out.pdf.toString()).toBe("master");
     expect(out.warnings.join("\n")).toMatch(/fell back to your master resume/);
   });
