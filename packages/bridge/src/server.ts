@@ -9,7 +9,7 @@ import { parse as parseYaml } from "yaml";
 import { JobQueue } from "./jobs";
 import { markApplied } from "./persist";
 import type { TailorJobResult } from "./tailor-job";
-import type { ChatEvent, TailorRequest } from "../../../lib/shared/types";
+import type { ChatEvent, TailorQuestion, TailorRequest } from "../../../lib/shared/types";
 import type { AnswerRequest, Answers } from "../../skill/src/tailor/answer";
 import { BusyError, type Chat } from "./chat";
 
@@ -128,6 +128,47 @@ export function createServer(options: ServerOptions = {}): Server {
     ? new JobQueue<AnswerRequest, Answers>(options.answer)
     : null;
 
+  const chat = options.chat;
+  type Answered = { fieldId: string; value: string }[];
+  // Wizard answers that finished before their tailoring job did, keyed by tailor job id.
+  const held = new Map<string, { questions: TailorQuestion[]; answers: Answered }[]>();
+
+  // Done tailor job -> its run id (and remembered in chat for later lookups).
+  function runOf(tailorJobId: string): string | undefined {
+    const job = jobs?.get(tailorJobId);
+    const runId = job?.status === "done" ? job.result?.result.runId : undefined;
+    if (runId && chat) chat.linkJob(tailorJobId, runId);
+    return runId;
+  }
+
+  // Never throws: a failed merge must not touch the /answer response.
+  function merge(runId: string, h: { questions: TailorQuestion[]; answers: Answered }) {
+    chat?.mergeAnswers(runId, h.questions, h.answers).catch((err: Error) =>
+      console.error(`[ApplyMate] merging answers into ${runId} failed: ${err.message}`),
+    );
+  }
+
+  // Run once a tailor job has settled: link it, then drain answers held for it.
+  function settled(tailorJobId: string) {
+    const runId = runOf(tailorJobId);
+    const batches = held.get(tailorJobId) ?? [];
+    held.delete(tailorJobId);
+    if (runId) batches.forEach((h) => merge(runId, h));
+  }
+
+  // The run's current state laid over the tailoring result; unreadable -> original result.
+  function current(runId: string | undefined, result: TailorJobResult["result"] | undefined) {
+    const state = runId && result ? chat?.get(runId)?.state : undefined;
+    if (!result || !state) return result;
+    return {
+      ...result,
+      coverLetter: state.coverLetter,
+      answers: Object.entries(state.answers).map(([fieldId, value]) => ({ fieldId, value })),
+      questions: state.questions,
+      version: state.version,
+    };
+  }
+
   return createHttpServer((req, res) => {
     const url = req.url ?? "/";
     const cors = corsHeaders(req.headers.origin);
@@ -187,7 +228,10 @@ export function createServer(options: ServerOptions = {}): Server {
         (parsed) => {
           const valid = validateTailorRequest(parsed);
           if (typeof valid === "string") return send(400, { error: valid });
-          return send(202, { jobId: jobs.enqueue(valid) });
+          const jobId = jobs.enqueue(valid);
+          // idle() resolves after this job (and any before it) has settled.
+          jobs.idle().then(() => settled(jobId));
+          return send(202, { jobId });
         },
         (err: Error) => send(400, { error: err.message }),
       );
@@ -198,15 +242,19 @@ export function createServer(options: ServerOptions = {}): Server {
     if (req.method === "GET" && jobMatch && jobs) {
       const job = jobs.get(jobMatch[1]);
       if (!job) return send(404, { error: "unknown job" });
+      const runId = runOf(jobMatch[1]);
+      const overlaid = current(runId, job.result?.result);
       if (jobMatch[2]) {
-        const bytes =
-          jobMatch[2] === "resume" ? job.result?.resumePdf : job.result?.coverLetterPdf;
+        const kind = jobMatch[2] as "resume" | "cover-letter";
+        // Once a chat apply has changed the run, its folder holds the latest files.
+        const latest = runId && overlaid && overlaid.version > 0 ? chat?.pdf(runId, kind) : null;
+        const bytes = latest ?? (kind === "resume" ? job.result?.resumePdf : job.result?.coverLetterPdf);
         if (!bytes) return send(404, { error: "pdf not ready" });
         res.writeHead(200, { "content-type": "application/pdf", ...cors });
         res.end(bytes);
         return;
       }
-      return send(200, { status: job.status, error: job.error, result: job.result?.result });
+      return send(200, { status: job.status, error: job.error, result: overlaid });
     }
 
     if (req.method === "POST" && url === "/answer") {
@@ -215,7 +263,21 @@ export function createServer(options: ServerOptions = {}): Server {
         (parsed) => {
           const valid = validateTailorRequest(parsed);
           if (typeof valid === "string") return send(400, { error: valid });
-          return send(202, { jobId: answerJobs.enqueue({ job: valid.job, fields: valid.fields }) });
+          const jobId = answerJobs.enqueue({ job: valid.job, fields: valid.fields });
+          const tailorJobId = s((parsed as Record<string, unknown>).tailorJobId);
+          if (tailorJobId && chat && jobs) {
+            answerJobs.idle().then(() => {
+              const answers = answerJobs.get(jobId)?.result?.answers;
+              const tj = jobs.get(tailorJobId);
+              // Failed answer job, or a tailor job that's unknown/failed: nothing to merge.
+              if (!answers?.length || !tj || tj.status === "error") return;
+              const h = { questions: valid.fields, answers };
+              const runId = runOf(tailorJobId);
+              if (runId) merge(runId, h);
+              else if (tj.status !== "done") held.set(tailorJobId, [...(held.get(tailorJobId) ?? []), h]);
+            });
+          }
+          return send(202, { jobId });
         },
         (err: Error) => send(400, { error: err.message }),
       );
@@ -261,7 +323,6 @@ export function createServer(options: ServerOptions = {}): Server {
     }
 
     const chatMatch = url.match(/^\/chat\/([\w-]+)(?:\/(apply|resume\.pdf|cover-letter\.pdf))?$/);
-    const chat = options.chat;
     if (chatMatch && chat) {
       const [, runId, sub] = chatMatch;
       if (!chat.has(runId)) return send(404, { error: "unknown run" });

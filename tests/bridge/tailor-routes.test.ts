@@ -8,6 +8,8 @@ import {
   validateTailorRequest,
 } from "../../packages/bridge/src/server";
 import type { TailorRequest } from "../../lib/shared/types";
+import { makeChat } from "../../packages/bridge/src/chat";
+import { fakeCompile, setupRun, tailorOutput, LETTER_AFTER } from "./run-fixture";
 
 const TOKEN = "t0ken";
 const dir = mkdtempSync(join(tmpdir(), "am-routes-"));
@@ -187,5 +189,43 @@ describe("validateTailorRequest", () => {
   });
   it("rejects a missing job url", () => {
     expect(validateTailorRequest({ job: { title: "T" } })).toMatch(/job\.url/);
+  });
+});
+
+describe("tailor routes serve current run state", () => {
+  it("after a chat apply, /tailor/:id returns the new cover letter and version 1, and resume.pdf returns the new bytes", async () => {
+    for (const [runId, proposalIndex] of [["run-a", 0], ["run-b", 1]] as const) {
+      const chat = makeChat({ ...(await setupRun(runId)), compile: fakeCompile });
+      const srv = createServer({ token: TOKEN, chat, tailor: async () => tailorOutput(runId) });
+      await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+      const addr = srv.address();
+      const url = `http://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}`;
+      try {
+        const { jobId } = await (await fetch(`${url}/tailor`, { method: "POST", headers: auth, body: JSON.stringify(body) })).json();
+        for (let i = 0; i < 50; i++) {
+          const s = await (await fetch(`${url}/tailor/${jobId}`, { headers: auth })).json();
+          if (s.status === "done") break;
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        // Version 0: today's result and bytes, untouched.
+        const v0 = await (await fetch(`${url}/tailor/${jobId}`, { headers: auth })).json();
+        expect(v0.result).toMatchObject({ version: 0, coverLetter: "Dear, old." });
+        const pdf0 = await fetch(`${url}/tailor/${jobId}/resume.pdf`, { headers: auth });
+        expect(Buffer.from(await pdf0.arrayBuffer()).toString()).toBe("%PDF-resume");
+
+        expect((await chat.apply(runId, { messageIndex: 0, proposalIndex })).ok).toBe(true);
+
+        const v1 = await (await fetch(`${url}/tailor/${jobId}`, { headers: auth })).json();
+        expect(v1.result.version).toBe(1);
+        expect(v1.result.answers).toEqual([]);
+        if (proposalIndex === 1) expect(v1.result.coverLetter).toBe(LETTER_AFTER);
+        else {
+          const pdf = await fetch(`${url}/tailor/${jobId}/resume.pdf`, { headers: auth });
+          expect(Buffer.from(await pdf.arrayBuffer()).toString()).toMatch(/^%PDF-new-/);
+        }
+      } finally {
+        await new Promise<void>((r) => srv.close(() => r()));
+      }
+    }
   });
 });

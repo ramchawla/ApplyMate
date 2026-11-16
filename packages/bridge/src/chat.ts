@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import type { ApplyResult, ChatEvent, ChatMessage, RunFile, RunState } from "../../../lib/shared/types";
+import type { ApplyResult, ChatEvent, ChatMessage, RunFile, RunState, TailorQuestion } from "../../../lib/shared/types";
 import { compileLatexWithPages } from "../../../lib/local/compile-latex";
 import { insertResumeVersion, listVersions, type Db } from "../../../lib/local/db";
 import { readRun, scanRuns, writeChat, writeState } from "../../../lib/local/runs";
@@ -275,6 +275,22 @@ export function makeChat(opts: {
       } catch {
         return null;
       }
+    },
+
+    // Wizard answers join the run. Goes through the apply queue so it can't race a chat
+    // apply's read-modify-write of state.json. Answers have no file, so version stays put.
+    mergeAnswers(
+      runId: string,
+      questions: TailorQuestion[],
+      answers: { fieldId: string; value: string }[],
+    ): Promise<void> {
+      return serial(runId, async () => {
+        const { dir, state } = load(runId);
+        const ids = new Set(questions.map((q) => q.fieldId));
+        state.questions = [...state.questions.filter((q) => !ids.has(q.fieldId)), ...questions];
+        state.answers = { ...state.answers, ...Object.fromEntries(answers.map((a) => [a.fieldId, a.value])) };
+        writeState(dir, state);
+      });
     },
 
     runIdForJob(tailorJobId: string): string | undefined {
