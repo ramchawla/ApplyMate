@@ -3,6 +3,7 @@ import { latexProblem, editWarnings, keywordWarnings, droppedItems } from "./che
 import { buildTailorPrompt, parseTailorOutput, TAILOR_SCHEMA, TAILOR_SYSTEM } from "./prompt";
 import { coverLetterTex, profileName } from "./letter";
 import type { ClaudeRunner } from "./claude-cli";
+import { fits, fitBudget, type Compiled } from "./fit";
 import { extractMetrics } from "../validators/invariant-checks";
 import type {
   EditRecord,
@@ -17,12 +18,7 @@ export interface TailorFiles {
   profileYaml: string;
 }
 
-export interface Compiled {
-  pdf: Buffer;
-  pages: number;
-  height?: number;
-  goal?: number;
-}
+export type { Compiled };
 
 export interface TailorDeps {
   runClaude: ClaudeRunner;
@@ -47,9 +43,6 @@ export interface TailorOutcome {
 }
 
 const MAX_FIT_ROUNDS = 10;
-// One text line (~11pt). TeX absorbs a single extra line in glue without
-// headings colliding (checked visually on the real master); two lines don't.
-const HEIGHT_SLACK_PT = 12;
 const FIT_REVERT_REASON = "reverted to keep the resume on one page";
 
 export async function tailorResume(
@@ -118,15 +111,14 @@ export async function tailorResume(
   // then headings collide with bullets; the master is the user's own
   // accepted density.
   const master = await deps.compile(files.masterTex);
-  const budget = Math.max(master.height ?? 0, master.goal ?? 0);
-  const fits = (c: Compiled) =>
-    c.pages <= 1 && (!budget || !c.height || c.height <= budget + HEIGHT_SLACK_PT);
+  const budget = fitBudget(master);
+  const fitsBudget = (c: Compiled) => fits(c, budget);
 
   let tex = renderResume(doc, active(), order);
   let compiled: Compiled;
   try {
     compiled = tex === files.masterTex ? master : await deps.compile(tex);
-    for (let round = 0; !fits(compiled) && round < MAX_FIT_ROUNDS; round++) {
+    for (let round = 0; !fitsBudget(compiled) && round < MAX_FIT_ROUNDS; round++) {
       const victim = edits
         .filter((e) => !e.reverted)
         .sort(
@@ -141,18 +133,18 @@ export async function tailorResume(
     // into the same lines. Try each fit-reverted edit back, smallest first.
     const growth = (e: EditRecord) => e.after.length - e.before.length;
     const retry = edits.filter((e) => e.reverted === FIT_REVERT_REASON).sort((a, b) => growth(a) - growth(b));
-    for (const e of fits(compiled) ? retry : []) {
+    for (const e of fitsBudget(compiled) ? retry : []) {
       e.reverted = undefined;
       const candidateTex = renderResume(doc, active(), order);
       const candidate = await deps.compile(candidateTex);
-      if (fits(candidate)) {
+      if (fitsBudget(candidate)) {
         tex = candidateTex;
         compiled = candidate;
       } else {
         e.reverted = FIT_REVERT_REASON;
       }
     }
-    if (!fits(compiled)) {
+    if (!fitsBudget(compiled)) {
       warnings.push("Resume is longer than your master even with all edits reverted");
     }
   } catch (err) {

@@ -129,7 +129,7 @@ export function buildTailorPrompt(req: TailorRequest, ctx: PromptContext): strin
 const isStr = (v: unknown): v is string => typeof v === "string";
 
 // Claude sometimes echoes the "[r1.b0] " label from the prompt into its text.
-function stripIdLabel(id: string, latex: string): string {
+export function stripIdLabel(id: string, latex: string): string {
   const label = `[${id}]`;
   const trimmed = latex.trimStart();
   return trimmed.startsWith(label) ? trimmed.slice(label.length).trimStart() : latex;
