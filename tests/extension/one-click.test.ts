@@ -255,6 +255,31 @@ describe("runOneClick", () => {
   });
 });
 
+describe("single page with a chat-changed run", () => {
+  it("re-attaches a newer run version even when the page shows the file name", async () => {
+    const d = page(`<label for="email">Email</label><input id="email" type="email">
+      <label for="res">Resume</label><input type="file" id="res"><span>R.pdf</span>`);
+    const got: File[] = [];
+    Object.defineProperty(d.getElementById("res"), "files", { set: (v) => got.push(...v), get: () => got, configurable: true });
+    vi.stubGlobal("DataTransfer", class { list: File[] = []; items = { add: (f: File) => this.list.push(f) }; get files() { return this.list; } });
+    const result = (version: number) => ({ applicationId: "a", fileName: "R.pdf", coverLetter: "", hasCoverLetterPdf: false, answers: [],
+      keywords: { present: [], injected: [], skipped: [] }, edits: [], warnings: [], pages: 1, savedTo: "/x", runId: "run-1c", version, questions: [], labels: {} });
+    const press = (version: number) => runOneClick({
+      doc: d, fields: extractLiveFields(d), keywords: [], pollMs: 1, settleMs: 1, tailorJobId: "J",
+      jd: { url: "u", title: "", company: "", description: "" }, jdSource: "none",
+      send: async (msg: any) => msg.type === "GET_PROFILE" ? normalizeProfile({}) : msg.type === "TAILOR_POLL" ? { status: "done", result: result(version) }
+        : msg.type === "FETCH_PDF" ? { base64: btoa("%PDF") } : { ok: true },
+      onStatus: () => {},
+    });
+    await press(0); // the page already shows version 0
+    expect(got).toEqual([]);
+    await press(1);
+    await press(1); // attached once per version
+    expect(got.map((f) => f.name)).toEqual(["R.pdf"]);
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("reusing a tailoring job on the next press", () => {
   const jd = { url: "https://acme/jobs/1", title: "SRE", company: "Acme", description: "JD" };
   const key = tailorKey(jd, ["go"]);

@@ -277,3 +277,63 @@ describe("user edit tracking", () => {
     expect([...touched].sort()).toEqual(["country", "why"]);
   });
 });
+
+describe("wizard reads the run's current state", () => {
+  const STEP_RES = `<label for="resume">Resume</label><input id="resume" type="file"><button>Next</button>`;
+  const withPoll = (results: Record<string, unknown>[]) => {
+    const { sent, send } = bridge([{ fieldId: "why", value: "Asked." }]);
+    let polls = 0;
+    const polling = async (m: any) => {
+      if (m.type === "TAILOR_POLL") {
+        sent.push(m);
+        return { status: "done", result: { ...RESULT, ...results[Math.min(polls++, results.length - 1)] } };
+      }
+      return send(m);
+    };
+    return { sent, send: polling };
+  };
+
+  it("a resume step re-attaches when result.version is newer than the attached one", async () => {
+    stubDataTransfer();
+    const v0 = withPoll([{ runId: "run-v", version: 0 }]);
+    const first = wizard([STEP_RES, STEP_REVIEW]);
+    await run(first.d, v0.send);
+    expect(first.log.snapshots[0].resume).toBe("Jane_Dev_Acme.pdf");
+
+    // A chat change bumped the version: attach it, even though the step
+    // already shows the file name (the text check is only for version 0).
+    const newer = wizard([STEP_RES.replace("<button>", "<span>Jane_Dev_Acme.pdf</span><button>"), STEP_REVIEW]);
+    const v1 = withPoll([{ runId: "run-v", version: 1 }]);
+    await run(newer.d, v1.send);
+    expect(v1.sent.filter((m) => m.type === "FETCH_PDF")).toHaveLength(1);
+    expect(newer.log.snapshots[0].resume).toBe("Jane_Dev_Acme.pdf");
+  });
+
+  it("step questions already answered in result.questions/answers (by label) are filled from state and not sent to /answer", async () => {
+    stubDataTransfer();
+    const { d, log } = wizard([
+      STEP_RES,
+      `<label for="salary">Salary expectations *</label><input id="salary" required>
+       <label for="why">Why Acme?</label><textarea id="why"></textarea><button>Next</button>`,
+      STEP_REVIEW,
+    ]);
+    // First poll (resume step): the tailoring output. The per-step re-poll
+    // on step 2 sees a chat-applied answer stored under an older stamp.
+    const { sent, send } = withPoll([
+      { runId: "run-s", version: 0, questions: [], answers: [] },
+      {
+        runId: "run-s", version: 0,
+        questions: [{ fieldId: "am-old", label: "Salary Expectations", type: "text", required: true }],
+        answers: [{ fieldId: "am-old", value: "120k" }],
+      },
+    ]);
+    const report = await run(d, send);
+    expect(report.stoppedAt).toBe("review");
+    expect(log.snapshots[1]).toEqual({ salary: "120k", why: "Asked." });
+    expect(sent.filter((m) => m.type === "TAILOR_POLL")).toHaveLength(2); // the await, then one re-poll on step 2
+    const ask = sent.filter((m) => m.type === "ANSWER_START");
+    expect(ask).toHaveLength(1);
+    expect(ask[0].request.fields.map((f: any) => f.fieldId)).toEqual(["why"]);
+    expect(ask[0].request.tailorJobId).toBe("T");
+  });
+});

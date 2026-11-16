@@ -7,6 +7,12 @@ export type {
   RunReport,
 } from "../../../lib/shared/types";
 
+// Side panel → tab (every frame): push an applied chat change into the page.
+export type PageSyncMsg =
+  | { type: "REATTACH_RESUME"; runId: string; fileName: string; version: number }
+  | { type: "REFILL_ANSWER"; label: string; value: string }
+  | { type: "REFILL_COVER_LETTER"; runId: string; text: string; hasPdf: boolean; fileName: string };
+
 export interface WorkEntry {
   company: string;
   title: string;

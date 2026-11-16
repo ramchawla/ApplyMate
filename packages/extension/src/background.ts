@@ -7,9 +7,10 @@ type BgMessage =
   | { type: "GET_PROFILE" }
   | { type: "TAILOR_START"; request: TailorRequest }
   | { type: "TAILOR_POLL"; jobId: string }
-  | { type: "ANSWER_START"; request: Pick<TailorRequest, "job" | "fields"> }
+  | { type: "ANSWER_START"; request: Pick<TailorRequest, "job" | "fields"> & { tailorJobId?: string } }
   | { type: "ANSWER_POLL"; jobId: string }
   | { type: "FETCH_PDF"; jobId: string; kind: "resume" | "cover-letter" }
+  | { type: "FETCH_RUN_PDF"; runId: string; kind: "resume" | "cover-letter" }
   | { type: "MARK_APPLIED"; jobUrl: string; company: string; jobTitle: string }
   | { type: "RUN_REPORT"; report: RunReport }
   | { type: "OPEN_SIDE_PANEL" }
@@ -48,6 +49,12 @@ function toBase64(buf: ArrayBuffer): string {
   return btoa(bin);
 }
 
+async function pdf(path: string): Promise<{ base64: string }> {
+  const res = await bridgeFetch(path);
+  if (!res.ok) throw new Error(`bridge ${res.status}`);
+  return { base64: toBase64(await res.arrayBuffer()) };
+}
+
 async function freshProfile(): Promise<Profile> {
   try {
     const res = await bridgeFetch("/profile");
@@ -79,13 +86,10 @@ async function handle(msg: BgMessage, sender: chrome.runtime.MessageSender): Pro
       return json(await bridgeFetch("/answer", post(msg.request)));
     case "ANSWER_POLL":
       return json(await bridgeFetch(`/answer/${encodeURIComponent(msg.jobId)}`));
-    case "FETCH_PDF": {
-      const res = await bridgeFetch(
-        `/tailor/${encodeURIComponent(msg.jobId)}/${msg.kind}.pdf`,
-      );
-      if (!res.ok) throw new Error(`bridge ${res.status}`);
-      return { base64: toBase64(await res.arrayBuffer()) };
-    }
+    case "FETCH_PDF":
+      return pdf(`/tailor/${encodeURIComponent(msg.jobId)}/${msg.kind}.pdf`);
+    case "FETCH_RUN_PDF":
+      return pdf(`/chat/${encodeURIComponent(msg.runId)}/${msg.kind}.pdf`);
     case "MARK_APPLIED":
       await json(await bridgeFetch("/applications/applied", post(msg)));
       return { ok: true };

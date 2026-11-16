@@ -143,3 +143,9 @@ export function visibleErrors(doc: Document): string[] {
   }
   return out;
 }
+
+// The current form's root: the open application dialog if any, else the page.
+export const scopeRoot = (doc: Document) => {
+  const scope = activeScope(doc);
+  return scope instanceof Document ? scope : (scope as Element);
+};

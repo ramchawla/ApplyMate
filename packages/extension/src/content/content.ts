@@ -5,7 +5,18 @@ import { applyFill, attachFile, findField, highlightEmptyRequired, isFieldEmpty,
 import { mountWidget, type WidgetState } from "./widget";
 import { FIELD_ATTR, press, sleep } from "./dom";
 import { fillWorkdayDates, fillWorkdaySections, isWorkday } from "./adapters/workday";
-import { activeScope, findStepButton, isApplyDialog, isSignInStep, stepSignature, visibleErrors, waitForStepChange } from "./wizard";
+import { activeScope, findStepButton, isApplyDialog, isSignInStep, scopeRoot, stepSignature, visibleErrors, waitForStepChange } from "./wizard";
+import {
+  attachedVersions,
+  base64ToFile,
+  coverLetterName,
+  handlePageSync,
+  isLoneCheckbox,
+  isPageSyncMsg,
+  pickResumeField,
+  stateAnswer,
+  toQuestion,
+} from "./page-sync";
 import { buildInstantPlan } from "../lib/field-mapping";
 import { normalizeProfile } from "../utils/profile";
 import { pickJD, rememberJD, type CachedJD, type PageJD } from "../lib/jd-cache";
@@ -71,13 +82,6 @@ export interface OneClickContext {
 const POLL_LIMIT_MS = 240_000;
 const MAX_STEPS = 15;
 
-function base64ToFile(b64: string, name: string): File {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new File([bytes], name, { type: "application/pdf" });
-}
-
 const CHOICE_CONTROL =
   "[aria-haspopup], [role=combobox], [role=radio], [role=checkbox], [aria-pressed], [role=option], input[type=radio], input[type=checkbox], select";
 
@@ -114,23 +118,10 @@ export async function runOneClick(ctx: OneClickContext): Promise<RunReport> {
   }
 }
 
-const scopeRoot = (doc: Document) => {
-  const scope = activeScope(doc);
-  return scope instanceof Document ? scope : (scope as Element);
-};
-
 // The fields of the current form: inside an open application dialog if
 // there is one (never the page's own search boxes), else the page.
 export const scanForm = (doc: Document, opts?: { stamp?: boolean }) =>
   extractLiveFields(scopeRoot(doc), opts);
-
-const toQuestion = (f: FormField) => ({
-  fieldId: f.id,
-  label: (f.description ? `${f.label} — ${f.description}` : f.label).slice(0, 500),
-  type: f.type,
-  options: f.options,
-  required: f.required,
-});
 
 // What Claude may answer: never a lone checkbox (consent/terms/opt-ins are
 // the user's call unless a profile rule matched), never a field that already
@@ -138,7 +129,7 @@ const toQuestion = (f: FormField) => ({
 // inputs keep their value elsewhere, so they're always asked.
 function askable(doc: Document, f: FormField): boolean {
   if (!f.label.trim()) return false; // nothing for Claude to answer
-  if (f.type === "checkbox" && (f.options?.length ?? 0) < 2) return false;
+  if (isLoneCheckbox(f)) return false;
   const el = findField(doc, f.id);
   return !el || el.getAttribute("role") === "combobox" || isFieldEmpty(el);
 }
@@ -197,12 +188,20 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
   let tailorJobId = ctx.tailorJobId;
   let result: TailorResult | undefined;
   let tailorAwaited = false;
-  const awaitTailoring = async () => {
-    if (!tailorAwaited && tailorJobId) {
+  let polledStep = 0;
+  // Waits for tailoring once; after that, one re-poll per step (no timer)
+  // picks up what the user applied in the side panel's chat.
+  const awaitTailoring = async (step: number) => {
+    if (!tailorJobId || polledStep === step) return result;
+    polledStep = step;
+    if (!tailorAwaited) {
       tailorAwaited = true;
       result = (await poll("TAILOR_POLL", tailorJobId, "Tailoring resume"))?.result;
-      if (result) report.result = result;
+    } else if (result) {
+      const s = await send({ type: "TAILOR_POLL", jobId: tailorJobId });
+      if (s?.status === "done" && s.result) result = s.result;
     }
+    if (result) report.result = result;
     return result;
   };
 
@@ -279,28 +278,31 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
       status({ tone: "ok", text: `Step ${step} · ${filledHere} fields filled` }, "ok");
     }
 
-    // Prefer the labelled Resume field over unlabelled "autofill from
-    // resume" drop zones (Ashby), which re-parse and overwrite the form.
-    const resumeFields = fields.filter((f) => f.type === "file" && f.extractedValueType === "resume");
-    const resumeField =
-      resumeFields.find((f) => /resume|cv|curriculum/i.test(f.label)) ?? resumeFields[0];
+    const resumeField = pickResumeField(fields);
     const answers: { fieldId: string; value: string }[] = [];
     let attachedNote = "";
     if (!wizard || resumeField || coverField) {
-      await awaitTailoring();
+      await awaitTailoring(step);
       const root = scopeRoot(doc);
       const shown = (root instanceof Document ? root.documentElement : root).textContent ?? "";
-      if (result && tailorJobId && resumeField && !shown.includes(result.fileName)) {
+      // Attach each run version once. The page's text only tells version 0
+      // apart (a reload forgets what was attached; every version shares the name).
+      const version = result?.version ?? 0;
+      const attached = result?.runId ? attachedVersions.get(result.runId) : undefined;
+      const fresh =
+        !!result && (attached ?? -1) < version && !(version === 0 && shown.includes(result.fileName));
+      if (result && tailorJobId && resumeField && fresh) {
         const input = findField(doc, resumeField.id) as HTMLInputElement | null;
         const pdf = input ? await send({ type: "FETCH_PDF", jobId: tailorJobId, kind: "resume" }) : null;
         const ok = !!pdf?.base64 && attachFile(input!, base64ToFile(pdf.base64, result.fileName));
+        if (ok && result.runId) attachedVersions.set(result.runId, version);
         attachedNote = ok ? `PDF attached (${result.pages} page)` : "PDF ready (attach manually)";
       }
       if (result && tailorJobId && coverField?.type === "file" && result.hasCoverLetterPdf) {
         const input = findField(doc, coverField.id) as HTMLInputElement | null;
         const pdf = await send({ type: "FETCH_PDF", jobId: tailorJobId, kind: "cover-letter" });
         if (input && pdf?.base64) {
-          attachFile(input, base64ToFile(pdf.base64, result.fileName.replace(/\.pdf$/, "_Cover_Letter.pdf")));
+          attachFile(input, base64ToFile(pdf.base64, coverLetterName(result.fileName)));
         }
       }
       if (result && coverField && coverField.type !== "file" && result.coverLetter) {
@@ -315,9 +317,23 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
       }
     }
     if (wizard && questions.length) {
-      const start = await send({ type: "ANSWER_START", request: { job, fields: questions.map(toQuestion) } });
-      const done = start?.jobId ? await poll("ANSWER_POLL", start.jobId, "Drafting answers") : null;
-      if (Array.isArray(done?.answers)) answers.push(...done.answers);
+      // Questions the run already answered (an earlier pass, or a chat
+      // change) fill from its state; only the rest go to Claude.
+      if (tailorAwaited) await awaitTailoring(step);
+      const ask: FormField[] = [];
+      for (const q of questions) {
+        const value = stateAnswer(result, q);
+        if (value?.trim()) answers.push({ fieldId: q.id, value });
+        else ask.push(q);
+      }
+      if (ask.length) {
+        const start = await send({
+          type: "ANSWER_START",
+          request: { job, fields: ask.map(toQuestion), tailorJobId },
+        });
+        const done = start?.jobId ? await poll("ANSWER_POLL", start.jobId, "Drafting answers") : null;
+        if (Array.isArray(done?.answers)) answers.push(...done.answers);
+      }
     }
     // Only what was asked: a consent box or a field the user filled never
     // takes an answer, whatever comes back.
@@ -600,6 +616,16 @@ async function main(): Promise<void> {
     },
     true,
   );
+
+  // Chat changes from the side panel (sent to every frame). Only the frame
+  // that applied it answers; silence from all frames means not-found.
+  chrome.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
+    if (!isPageSyncMsg(msg)) return false;
+    void handlePageSync(document, msg, { send, touched }).then((r) => {
+      if (r === "ok") sendResponse(r);
+    });
+    return true;
+  });
 
   // Wizards (Workday, LinkedIn Easy Apply, Ashby) inject fields later; SPAs
   // change the job without a page load.
