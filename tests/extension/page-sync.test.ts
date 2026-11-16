@@ -90,6 +90,15 @@ describe("page sync", () => {
     expect(touched.size).toBe(0);
   });
 
+  it("REFILL_ANSWER is not-found when the label is ambiguous in the frame", async () => {
+    const { d } = page(`<label for="a">Please specify</label><input id="a">
+      <label for="b">Please specify</label><input id="b">`);
+    const res = await handlePageSync(d, { type: "REFILL_ANSWER", label: "Please specify", value: "x" }, { send: bridge().send, touched: new Set() });
+    expect(res).toBe("not-found");
+    expect((d.getElementById("a") as HTMLInputElement).value).toBe("");
+    expect((d.getElementById("b") as HTMLInputElement).value).toBe("");
+  });
+
   it("REFILL_ANSWER never checks a lone consent checkbox", async () => {
     const { d } = page(`<input type="checkbox" id="agree"><label for="agree">I agree to the terms</label>`);
     const res = await handlePageSync(d, { type: "REFILL_ANSWER", label: "I agree to the terms", value: "Yes" }, { send: bridge().send, touched: new Set() });

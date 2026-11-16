@@ -36,9 +36,21 @@ const labelMatches = (f: FormField, label: string) => {
 // Consent/terms/opt-ins are never ours to tick.
 export const isLoneCheckbox = (f: FormField) => f.type === "checkbox" && (f.options?.length ?? 0) < 2;
 
-// The run's answer for a field, matched by its question's label.
-export function stateAnswer(result: TailorResult | undefined, f: FormField): string | undefined {
-  const q = result?.questions?.find((q) => labelMatches(f, q.label));
+// The run's answer for a field: its own stamp first; else its label, but
+// only when that label is unique in the run and on this step (wizards
+// repeat "If yes, please explain." on many steps).
+export function stateAnswer(
+  result: TailorResult | undefined,
+  f: FormField,
+  stepFields: FormField[],
+): string | undefined {
+  const questions = result?.questions ?? [];
+  let q = questions.find((q) => q.fieldId === f.id && labelMatches(f, q.label));
+  if (!q) {
+    const byLabel = questions.filter((q) => labelMatches(f, q.label));
+    const onStep = byLabel.length === 1 ? stepFields.filter((s) => labelMatches(s, byLabel[0].label)) : [];
+    if (onStep.length === 1) q = byLabel[0];
+  }
   return q && result?.answers.find((a) => a.fieldId === q.fieldId)?.value;
 }
 
@@ -92,8 +104,9 @@ export async function handlePageSync(
     ok = !!field && (await attachRunPdf(doc, field, deps.send, msg.runId, "resume", msg.fileName));
     if (ok) attachedVersions.set(msg.runId, msg.version);
   } else if (msg.type === "REFILL_ANSWER") {
-    const field = fields.find((f) => !isLoneCheckbox(f) && labelMatches(f, msg.label));
-    ok = !!field && (await fillExplicit(doc, field, msg.value, deps.touched));
+    // An ambiguous label is never guessed at: not-found.
+    const matches = fields.filter((f) => !isLoneCheckbox(f) && labelMatches(f, msg.label));
+    ok = matches.length === 1 && (await fillExplicit(doc, matches[0], msg.value, deps.touched));
   } else {
     const field = fields.find((f) => f.extractedValueType === "cover-letter");
     if (field?.type === "file") {

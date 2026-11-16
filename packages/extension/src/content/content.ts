@@ -285,12 +285,13 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
       await awaitTailoring(step);
       const root = scopeRoot(doc);
       const shown = (root instanceof Document ? root.documentElement : root).textContent ?? "";
-      // Attach each run version once. The page's text only tells version 0
-      // apart (a reload forgets what was attached; every version shares the name).
+      // Version 0: attach unless the page shows it (re-pressing repairs a
+      // removed or rejected upload). Chat versions: attach each one once
+      // (every version shares the file name, so the text can't tell).
       const version = result?.version ?? 0;
       const attached = result?.runId ? attachedVersions.get(result.runId) : undefined;
       const fresh =
-        !!result && (attached ?? -1) < version && !(version === 0 && shown.includes(result.fileName));
+        !!result && (version === 0 ? !shown.includes(result.fileName) : (attached ?? -1) < version);
       if (result && tailorJobId && resumeField && fresh) {
         const input = findField(doc, resumeField.id) as HTMLInputElement | null;
         const pdf = input ? await send({ type: "FETCH_PDF", jobId: tailorJobId, kind: "resume" }) : null;
@@ -322,7 +323,7 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
       if (tailorAwaited) await awaitTailoring(step);
       const ask: FormField[] = [];
       for (const q of questions) {
-        const value = stateAnswer(result, q);
+        const value = stateAnswer(result, q, fields);
         if (value?.trim()) answers.push({ fieldId: q.id, value });
         else ask.push(q);
       }
@@ -621,9 +622,10 @@ async function main(): Promise<void> {
   // that applied it answers; silence from all frames means not-found.
   chrome.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
     if (!isPageSyncMsg(msg)) return false;
-    void handlePageSync(document, msg, { send, touched }).then((r) => {
-      if (r === "ok") sendResponse(r);
-    });
+    handlePageSync(document, msg, { send, touched }).then(
+      (r) => r === "ok" && sendResponse(r),
+      (err: unknown) => console.error("[ApplyMate] page sync failed:", err),
+    );
     return true;
   });
 

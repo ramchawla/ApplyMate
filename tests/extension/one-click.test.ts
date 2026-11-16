@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   isApplicationForm,
   isSubmitControl,
@@ -9,6 +9,8 @@ import {
 } from "../../packages/extension/src/content/content";
 import { extractLiveFields } from "../../packages/extension/src/content/extractors/form";
 import { normalizeProfile } from "../../packages/extension/src/utils/profile";
+
+afterEach(() => vi.unstubAllGlobals());
 
 const GREENHOUSE_LIKE = `
   <form>
@@ -160,7 +162,6 @@ describe("runOneClick", () => {
     expect(sent.some((m) => m.type === "ANSWER_START")).toBe(false);
     expect(statuses[0]).toMatch(/filled/);
     expect(sent.some((m) => m.type === "RUN_REPORT")).toBe(true);
-    vi.unstubAllGlobals();
   });
 
   it("keeps the instant fill and reports when the bridge is offline", async () => {
@@ -220,7 +221,6 @@ describe("runOneClick", () => {
     });
     expect(got.res.map((f) => f.name)).toEqual(["R.pdf"]);
     expect(got.dropzone).toEqual([]);
-    vi.unstubAllGlobals();
   });
 
   it("never overwrites what the user typed while tailoring ran", async () => {
@@ -276,7 +276,26 @@ describe("single page with a chat-changed run", () => {
     await press(1);
     await press(1); // attached once per version
     expect(got.map((f) => f.name)).toEqual(["R.pdf"]);
-    vi.unstubAllGlobals();
+  });
+
+  it("re-pressing retries the version-0 attach when the page doesn't show it", async () => {
+    const d = page(`<label for="res">Resume</label><input type="file" id="res">`);
+    const got: File[] = [];
+    // The site drops the upload (rejected, or the input re-rendered empty).
+    Object.defineProperty(d.getElementById("res"), "files", { set: (v) => got.push(...v), get: () => [], configurable: true });
+    vi.stubGlobal("DataTransfer", class { list: File[] = []; items = { add: (f: File) => this.list.push(f) }; get files() { return this.list; } });
+    const press = () => runOneClick({
+      doc: d, fields: extractLiveFields(d), keywords: [], pollMs: 1, settleMs: 1, tailorJobId: "J",
+      jd: { url: "u", title: "", company: "", description: "" }, jdSource: "none",
+      send: async (msg: any) => msg.type === "GET_PROFILE" ? normalizeProfile({}) : msg.type === "TAILOR_POLL"
+        ? { status: "done", result: { applicationId: "a", fileName: "R.pdf", coverLetter: "", hasCoverLetterPdf: false, answers: [],
+            keywords: { present: [], injected: [], skipped: [] }, edits: [], warnings: [], pages: 1, savedTo: "/x", runId: "run-v0", version: 0, questions: [], labels: {} } }
+        : msg.type === "FETCH_PDF" ? { base64: btoa("%PDF") } : { ok: true },
+      onStatus: () => {},
+    });
+    await press();
+    await press();
+    expect(got.map((f) => f.name)).toEqual(["R.pdf", "R.pdf"]);
   });
 });
 

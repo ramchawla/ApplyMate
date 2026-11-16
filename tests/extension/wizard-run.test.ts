@@ -336,4 +336,32 @@ describe("wizard reads the run's current state", () => {
     expect(ask[0].request.fields.map((f: any) => f.fieldId)).toEqual(["why"]);
     expect(ask[0].request.tailorJobId).toBe("T");
   });
+
+  it("matches a state answer by its own field first, and asks Claude when a label is ambiguous", async () => {
+    stubDataTransfer();
+    const { d, log } = wizard([
+      STEP_RES,
+      `<label for="explain">If yes, please explain.</label><textarea id="explain"></textarea>
+       <label for="why">Please specify</label><textarea id="why"></textarea><button>Next</button>`,
+      STEP_REVIEW,
+    ]);
+    const { sent, send } = withPoll([{
+      runId: "run-amb", version: 0,
+      questions: [
+        { fieldId: "am-9", label: "If yes, please explain.", type: "textarea", required: false },
+        { fieldId: "explain", label: "If yes, please explain.", type: "textarea", required: false },
+        { fieldId: "am-1", label: "Please specify", type: "text", required: false },
+        { fieldId: "am-2", label: "Please specify", type: "text", required: false },
+      ],
+      answers: [
+        { fieldId: "am-9", value: "Another step's answer." },
+        { fieldId: "explain", value: "This field's answer." },
+        { fieldId: "am-1", value: "Step 3's." },
+        { fieldId: "am-2", value: "Step 5's." },
+      ],
+    }]);
+    await run(d, send);
+    expect(log.snapshots[1]).toEqual({ explain: "This field's answer.", why: "Asked." });
+    expect(sent.find((m) => m.type === "ANSWER_START").request.fields.map((f: any) => f.fieldId)).toEqual(["why"]);
+  });
 });
