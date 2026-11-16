@@ -8,8 +8,7 @@ export interface WidgetState {
   keywords: string[];
   busy: boolean;
   lines: { tone: "ok" | "wait" | "warn" | "err"; text: string }[];
-  injected: string[];
-  skipped: { keyword: string; reason: string }[];
+  summary?: { covered: number; total: number; warnings: number };
   collapsed: boolean;
   canOpenPdf: boolean;
 }
@@ -19,7 +18,7 @@ export interface WidgetHandlers {
   onKeywordsChange(keywords: string[]): void;
   onDismissJD(): void;
   onOpenPdf(): void;
-  onDetails(): void;
+  onReview(): void;
   onToggle(): void;
 }
 
@@ -52,7 +51,6 @@ const CSS = `
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
 .chip { background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
 .chip button, .x { background: none; border: 0; cursor: pointer; color: inherit; padding: 0 0 0 4px; font: inherit; }
-.ok { background: #dcfce7; color: #166534; } .no { background: #f3f4f6; color: #6b7280; }
 input { width: 100%; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 6px; padding: 4px 6px; font: inherit; }
 .run { width: 100%; margin: 8px 0 4px; padding: 8px; border: 0; border-radius: 8px; background: #4f46e5; color: #fff;
   font-weight: 600; cursor: pointer; font-size: 14px; }
@@ -104,7 +102,7 @@ export function mountWidget(
     if (action === "run") handlers.onRun();
     else if (action === "dismiss-jd") handlers.onDismissJD();
     else if (action === "pdf") handlers.onOpenPdf();
-    else if (action === "details") handlers.onDetails();
+    else if (action === "review") handlers.onReview();
     else if (action === "toggle") handlers.onToggle();
   });
   root.addEventListener("keydown", (e) => {
@@ -153,17 +151,17 @@ export function mountWidget(
           `<div class="line ${l.tone === "warn" || l.tone === "err" ? l.tone : ""}">${ICON[l.tone]} ${escapeHtml(l.text)}</div>`,
       )
       .join("");
-    const report =
-      s.injected.length || s.skipped.length
-        ? `<div class="chips">${s.injected
-            .map((k) => `<span class="chip ok">✓ ${escapeHtml(k)}</span>`)
-            .join("")}${s.skipped
-            .map(
-              (k) =>
-                `<span class="chip no" title="${escapeHtml(k.reason)}">✗ ${escapeHtml(k.keyword)}</span>`,
-            )
-            .join("")}</div>`
-        : "";
+    // Numbers only, so nothing here needs escaping.
+    const sum = s.summary;
+    const report = sum
+      ? `<div class="line">${[
+          "Tailored",
+          sum.total ? `coverage ${sum.covered}/${sum.total}` : "",
+          sum.warnings ? `${sum.warnings} warning${sum.warnings === 1 ? "" : "s"}` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ")}</div>`
+      : "";
 
     root.innerHTML = `<style>${CSS}</style><div class="card ${placement}">
       <div class="head"><span>⚡ ApplyMate</span><button class="x" data-action="toggle" title="Collapse">–</button></div>
@@ -173,7 +171,7 @@ export function mountWidget(
       <input data-role="kw" placeholder="Add keywords (Enter)" />
       <button class="run" data-action="run" ${s.busy ? "disabled" : ""}>${s.busy ? "Working…" : "⚡ Autofill &amp; Tailor"}</button>
       ${lines}${report}
-      <div class="links">${s.canOpenPdf ? `<button data-action="pdf">Open PDF</button>` : ""}<button data-action="details">Details</button></div>
+      <div class="links">${s.canOpenPdf ? `<button data-action="pdf">Open PDF</button>` : ""}<button data-action="review">Review &amp; chat →</button></div>
     </div>`;
 
     const input = root.querySelector<HTMLInputElement>("input[data-role=kw]")!;

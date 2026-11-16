@@ -13,8 +13,6 @@ const base: WidgetState = {
   keywords: ["go"],
   busy: false,
   lines: [],
-  injected: [],
-  skipped: [],
   collapsed: false,
   canOpenPdf: false,
 };
@@ -25,7 +23,7 @@ function setup() {
     onKeywordsChange: vi.fn(),
     onDismissJD: vi.fn(),
     onOpenPdf: vi.fn(),
-    onDetails: vi.fn(),
+    onReview: vi.fn(),
     onToggle: vi.fn(),
   };
   // Tests drive the widget with synthetic events, so opt out of the
@@ -41,6 +39,30 @@ describe("widget", () => {
     expect(root.innerHTML).toContain("SRE &lt;script&gt;");
     expect(root.querySelector("script")).toBeNull();
     expect(escapeHtml(`"&'<>`)).toBe("&quot;&amp;&#39;&lt;&gt;");
+  });
+
+  it("shows a slim summary and a Review & chat button after a run", () => {
+    const { w, root, handlers } = setup();
+    w.render({ ...base, canOpenPdf: true, summary: { covered: 14, total: 19, warnings: 2 } });
+    expect(root.textContent).toContain("Tailored · coverage 14/19 · 2 warnings");
+    expect(root.querySelector(".chip.ok, .chip.no")).toBeNull();
+    const btn = root.querySelector("[data-action=review]") as HTMLButtonElement;
+    expect(btn.textContent).toBe("Review & chat →");
+    expect(root.querySelector("[data-action=details]")).toBeNull();
+    btn.click();
+    expect(handlers.onReview).toHaveBeenCalledOnce();
+  });
+
+  it("omits 0/0 coverage, pluralizes warnings, and hides the line with no summary", () => {
+    const { w, root } = setup();
+    w.render({ ...base, summary: { covered: 0, total: 0, warnings: 1 } });
+    expect(root.textContent).toContain("Tailored · 1 warning");
+    expect(root.textContent).not.toContain("0/0");
+    w.render({ ...base, summary: { covered: 3, total: 4, warnings: 0 } });
+    expect(root.textContent).toContain("Tailored · coverage 3/4");
+    expect(root.textContent).not.toContain("warning");
+    w.render(base);
+    expect(root.textContent).not.toContain("Tailored");
   });
 
   it("fires onRun from the main button and disables it while busy", () => {
@@ -83,7 +105,7 @@ describe("widget", () => {
   it("ignores synthetic clicks and keys from the page by default", () => {
     const handlers = {
       onRun: vi.fn(), onKeywordsChange: vi.fn(), onDismissJD: vi.fn(),
-      onOpenPdf: vi.fn(), onDetails: vi.fn(), onToggle: vi.fn(),
+      onOpenPdf: vi.fn(), onReview: vi.fn(), onToggle: vi.fn(),
     };
     const w = mountWidget(document, handlers, "bottom");
     w.render(base);

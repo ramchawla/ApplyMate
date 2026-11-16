@@ -53,6 +53,12 @@ export function isPostingPage(board: string, confidence: number): boolean {
   return board !== "generic" || confidence >= 0.75;
 }
 
+function summarize(r: TailorResult): WidgetState["summary"] {
+  const k = r.keywords;
+  const covered = k.present.length + k.injected.length;
+  return { covered, total: covered + k.skipped.length, warnings: r.warnings.length };
+}
+
 type Line = WidgetState["lines"][number];
 // Messages to the background worker; responses are loosely typed JSON.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -348,7 +354,7 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
       status({ tone: "ok", text: [attachedNote, `${second.filled.length} answers drafted`].filter(Boolean).join(" · ") }, "wait");
     }
     if (result?.warnings.length && step === 1 && !wizard) {
-      status({ tone: "warn", text: `${result.warnings.length} things to double-check (Details)` });
+      status({ tone: "warn", text: `${result.warnings.length} things to double-check (Review & chat)` });
     }
 
     report.needsYou = highlightEmptyRequired(doc, fields);
@@ -485,8 +491,6 @@ async function main(): Promise<void> {
     keywords: await storageGet<string[]>("keywords", []),
     busy: false,
     lines: [],
-    injected: [],
-    skipped: [],
     collapsed: false,
     canOpenPdf: false,
   };
@@ -536,7 +540,7 @@ async function main(): Promise<void> {
   const handlers = {
     onRun: async () => {
       if (ui.busy) return;
-      Object.assign(ui, { busy: true, lines: [], injected: [], skipped: [], canOpenPdf: false });
+      Object.assign(ui, { busy: true, lines: [], summary: undefined, canOpenPdf: false });
       widget?.render(ui);
       fields = scanForm(document);
       const { jd, source } = await currentJD();
@@ -577,8 +581,7 @@ async function main(): Promise<void> {
       Object.assign(ui, {
         busy: false,
         canOpenPdf: !!report.result,
-        injected: report.result?.keywords.injected.map((k) => k.keyword) ?? [],
-        skipped: report.result?.keywords.skipped ?? [],
+        summary: report.result && summarize(report.result),
       });
       widget?.render(ui);
     },
@@ -600,7 +603,7 @@ async function main(): Promise<void> {
         );
       }
     },
-    onDetails: () => void send({ type: "OPEN_SIDE_PANEL" }),
+    onReview: () => void send({ type: "OPEN_SIDE_PANEL" }),
     onToggle: () => {
       ui.collapsed = !ui.collapsed;
       widget?.render(ui);
