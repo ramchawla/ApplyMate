@@ -9,8 +9,9 @@ import { parse as parseYaml } from "yaml";
 import { JobQueue } from "./jobs";
 import { markApplied } from "./persist";
 import type { TailorJobResult } from "./tailor-job";
-import type { TailorRequest } from "../../../lib/shared/types";
+import type { ChatEvent, TailorRequest } from "../../../lib/shared/types";
 import type { AnswerRequest, Answers } from "../../skill/src/tailor/answer";
+import { BusyError, type Chat } from "./chat";
 
 export interface ServerOptions {
   // When set, every route except /health and /pair requires
@@ -28,6 +29,8 @@ export interface ServerOptions {
   profilePath?: string;
   // Records the first extension origin that paired (trust on first use).
   pairFile?: string;
+  // Per-run chat (side panel): streamed turns, apply/undo, run PDFs.
+  chat?: Chat;
 }
 
 // Reflect CORS only for the extension origin. A localhost bridge holding the
@@ -255,6 +258,74 @@ export function createServer(options: ServerOptions = {}): Server {
         (err: Error) => send(400, { error: err.message }),
       );
       return;
+    }
+
+    const chatMatch = url.match(/^\/chat\/([\w-]+)(?:\/(apply|resume\.pdf|cover-letter\.pdf))?$/);
+    const chat = options.chat;
+    if (chatMatch && chat) {
+      const [, runId, sub] = chatMatch;
+      if (!chat.has(runId)) return send(404, { error: "unknown run" });
+      const fail = (err: Error) => send(500, { error: err.message });
+
+      if (req.method === "GET" && !sub) {
+        const run = chat.get(runId);
+        return run ? send(200, run) : send(500, { error: "run files unreadable (see bridge.log)" });
+      }
+
+      if (req.method === "GET" && sub?.endsWith(".pdf")) {
+        const bytes = chat.pdf(runId, sub === "resume.pdf" ? "resume" : "cover-letter");
+        if (!bytes) return send(404, { error: "pdf not found" });
+        res.writeHead(200, { "content-type": "application/pdf", ...cors });
+        res.end(bytes);
+        return;
+      }
+
+      if (req.method === "POST" && sub === "apply") {
+        readJson(req).then((parsed) => {
+          const p = (parsed ?? {}) as Record<string, unknown>;
+          const idx = (v: unknown) => Number.isInteger(v) && (v as number) >= 0;
+          if (!idx(p.messageIndex) || !idx(p.proposalIndex)) {
+            return send(400, { error: "messageIndex and proposalIndex are required" });
+          }
+          return chat
+            .apply(runId, {
+              messageIndex: p.messageIndex as number,
+              proposalIndex: p.proposalIndex as number,
+              undo: p.undo === true,
+            })
+            .then((r) => send(r.ok ? 200 : 409, r), fail);
+        }, (err: Error) => send(400, { error: err.message }));
+        return;
+      }
+
+      if (req.method === "POST" && !sub) {
+        readJson(req).then((parsed) => {
+          const message = s((parsed as Record<string, unknown> | null)?.message).trim();
+          if (!message) return send(400, { error: "message is required" });
+          // Headers go out with the first event, so busy/unreadable can still be a status code.
+          // A client that disconnects mid-turn stops getting lines; the turn still finishes
+          // so chat.json stays whole.
+          let started = false;
+          const write = (e: ChatEvent) => {
+            if (!started) {
+              res.writeHead(200, { "content-type": "application/x-ndjson", ...cors });
+              started = true;
+            }
+            if (!res.destroyed && !res.writableEnded) res.write(JSON.stringify(e) + "\n");
+          };
+          chat.send(runId, message, write).then(
+            () => started && res.end(),
+            (err: Error) => {
+              if (!started) {
+                return err instanceof BusyError ? send(409, { error: "busy" }) : fail(err);
+              }
+              write({ t: "error", message: err.message });
+              res.end();
+            },
+          );
+        }, (err: Error) => send(400, { error: err.message }));
+        return;
+      }
     }
 
     return send(404, { error: "not found" });

@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "./server";
 import { makeAnswerJob, makeTailorJob } from "./tailor-job";
+import { makeChat } from "./chat";
 import { openDb, migrate } from "../../../lib/local/db";
 
 const PORT = Number(process.env.APPLYMATE_BRIDGE_PORT ?? 4179);
@@ -35,6 +36,7 @@ const server = createServer({
   answer: makeAnswerJob({ dir }),
   profilePath: join(dir, "profile.yaml"),
   pairFile: join(dir, "paired-extension"),
+  chat: makeChat({ appsDir: join(dir, "applications"), dir, db }),
 });
 
 server.listen(PORT, "127.0.0.1", () => {
