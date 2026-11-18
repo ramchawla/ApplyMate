@@ -33,6 +33,8 @@ export function ProposalCard({
   onDismiss,
   onAsk,
   onDownload,
+  onFillAgain,
+  jobTitle,
 }: {
   p: Proposal;
   applied: boolean;
@@ -44,6 +46,8 @@ export function ProposalCard({
   onDismiss: (on: boolean) => void;
   onAsk: (text: string) => void;
   onDownload: () => void;
+  onFillAgain: () => void;
+  jobTitle: string;
 }) {
   if (dismissed && !applied) {
     return (
@@ -105,29 +109,40 @@ export function ProposalCard({
             {reason}.
           </Flag>
         ))}
-      {ui.sync === "not-found" &&
-        (resume ? (
-          <Flag kind="info" icon="back">
-            Resume step isn't on screen. Go back to it and press ↻ Re-attach, or{" "}
-            <button type="button" onClick={onDownload} className="font-medium text-accent-text underline">
-              Download PDF
-            </button>
-          </Flag>
-        ) : p.target === "cover-letter" ? (
-          <Flag kind="info" icon="back">
-            The cover letter isn't on this step. Go back to it and the new letter fills in.
-          </Flag>
-        ) : (
-          <Flag kind="info" icon="back">
-            That question is on an earlier step. Go back to it and the new answer fills in.
-          </Flag>
-        ))}
+      {ui.sync && ui.sync !== "ok" && (
+        <Flag kind={ui.sync === "no-bridge" ? "err" : "info"} icon={ui.sync === "no-bridge" ? "warn" : "back"}>
+          {ui.sync === "other-page" ? (
+            <>This tab is on a different page now. Go back to {jobTitle || "the application"}, then press Fill again.</>
+          ) : ui.sync === "no-bridge" ? (
+            <>Couldn't reach the bridge to fetch the PDF. Start it, then press Fill again.</>
+          ) : resume ? (
+            <>
+              The resume step isn't on screen. Go back to it, then press Fill again (or press ⚡).{" "}
+              <button type="button" onClick={onDownload} className="font-medium text-accent-text underline">
+                Download PDF
+              </button>
+            </>
+          ) : p.target === "cover-letter" ? (
+            <>The cover letter isn't on this step. Go back to it, then press Fill again.</>
+          ) : (
+            <>That question isn't on this step. Go back to it, then press Fill again.</>
+          )}{" "}
+          <button
+            type="button"
+            onClick={onFillAgain}
+            disabled={!!ui.busy}
+            className="font-medium text-accent-text underline disabled:opacity-50"
+          >
+            {ui.busy === "fill" ? "Filling…" : "Fill again"}
+          </button>
+        </Flag>
+      )}
 
       <div className="flex items-center gap-1.5 px-3 py-2.5">
         {applied ? (
           <>
             <span className="flex-1 text-small text-text-2">
-              {resume && ui.sync === "ok" && ui.version !== undefined ? `Version ${ui.version + 1} attached to the form` : ""}
+              {resume && ui.sync === "ok" && ui.version !== undefined ? `Version ${ui.version} attached to the form` : ""}
             </span>
             <button type="button" onClick={onUndo} disabled={!!ui.busy} className={ghost}>
               <Icon name="undo" />

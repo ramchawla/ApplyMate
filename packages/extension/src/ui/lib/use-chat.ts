@@ -2,17 +2,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bridgeFetch } from "../../utils/bridge";
 import { readNdjson } from "./ndjson";
-import { syncToPage } from "./page-sync";
+import { syncToPage, type SyncResult } from "./page-sync";
 import { pollUntil } from "./chat-logic";
-import type { ApplyResult, ChatMessage, RunFile, RunState } from "../../../../../lib/shared/types";
+import type { ApplyResult, ChatMessage, Proposal, RunFile, RunState } from "../../../../../lib/shared/types";
 
 export type RunData = { report: RunFile; state: RunState; chat: ChatMessage[]; master: Record<string, string> };
 // Per card ("<messageIndex>:<proposalIndex>"), this panel session only.
-export type CardUi = { busy?: "apply" | "undo"; error?: string; sync?: "ok" | "not-found"; version?: number };
+export type CardUi = { busy?: "apply" | "undo" | "fill"; error?: string; sync?: SyncResult; version?: number };
 
 const json = { "content-type": "application/json" };
 
-export function useChat(runId: string | undefined, version: number | undefined, tabId: number | undefined) {
+// `pageUrl`: the tab's page when this run was tailored; page sync fills only that job's form.
+export function useChat(
+  runId: string | undefined,
+  version: number | undefined,
+  tabId: number | undefined,
+  pageUrl: string | undefined,
+) {
   const [data, setData] = useState<RunData | { error: string } | null>(null);
   // `finishing`: the bridge is still running a turn this panel can't stream (stopped, cut off,
   // or another one in flight); a muted line stands in for the reply until it lands.
@@ -138,6 +144,24 @@ export function useChat(runId: string | undefined, version: number | undefined, 
 
   const stop = () => abort.current?.abort(); // no-op once finishing
 
+  // Push a proposal's value (or, after an undo, its `before`) into the page.
+  async function pushToPage(key: string, p: Proposal, undo: boolean, version: number, state: RunState) {
+    if (!runId || !data || !("report" in data)) return;
+    const { report } = data;
+    const sync =
+      tabId === undefined
+        ? "other-page"
+        : await syncToPage(tabId, undo ? { ...p, after: p.before } : p, {
+            runId,
+            fileName: report.fileName,
+            version,
+            hasCoverLetterPdf: report.wantCoverLetterPdf,
+            questions: [...state.questions, ...report.questions],
+            pageUrl: pageUrl || report.job.url,
+          });
+    setCard(key, { sync, version });
+  }
+
   async function apply(mi: number, pi: number, undo = false) {
     if (!runId || !data || !("report" in data)) return;
     const p = data.chat[mi]?.proposals?.[pi];
@@ -155,21 +179,28 @@ export function useChat(runId: string | undefined, version: number | undefined, 
         return setCard(key, { error: ("reason" in r && r.reason) || ("error" in r && r.error) || `HTTP ${res.status}` });
       }
       await load();
-      const { report } = data;
-      const sync =
-        tabId === undefined
-          ? "not-found"
-          : await syncToPage(tabId, undo ? { ...p, after: p.before } : p, {
-              runId,
-              fileName: report.fileName,
-              version: r.version,
-              hasCoverLetterPdf: report.wantCoverLetterPdf,
-              questions: [...r.state.questions, ...report.questions],
-            });
-      setCard(key, { sync, version: r.version });
+      await pushToPage(key, p, undo, r.version, r.state);
     } catch (e) {
       setCard(key, { error: `Couldn't reach the bridge: ${(e as Error).message}` });
     }
+  }
+
+  // "Fill again" on a card the page didn't take: the same gated sync of what the run
+  // holds now for that target (applied or undone since), nothing re-applied.
+  async function fillAgain(mi: number, pi: number) {
+    if (!runId || !data || !("report" in data)) return;
+    const p = data.chat[mi]?.proposals?.[pi];
+    const key = `${mi}:${pi}`;
+    if (!p || cards[key]?.busy) return;
+    const { state } = data;
+    const after =
+      p.target === "cover-letter"
+        ? state.coverLetter
+        : p.target.startsWith("answer:")
+          ? (state.answers[p.target.slice("answer:".length)] ?? "")
+          : p.after; // a resume part re-attaches the run's current PDF
+    setCard(key, { ...cards[key], busy: "fill" });
+    await pushToPage(key, { ...p, after }, false, state.version, state);
   }
 
   function dismiss(key: string, on: boolean) {
@@ -194,7 +225,7 @@ export function useChat(runId: string | undefined, version: number | undefined, 
     }
   }
 
-  return { data, load, streaming, sendError, send, stop, cards, apply, dismissed, dismiss, downloadResume };
+  return { data, load, streaming, sendError, send, stop, cards, apply, fillAgain, dismissed, dismiss, downloadResume };
 }
 
 export type Chat = ReturnType<typeof useChat>;

@@ -97,7 +97,9 @@ async function handle(msg: BgMessage, sender: chrome.runtime.MessageSender): Pro
       // Frames can't see their tab's URL; the side panel keys pasted JDs by it.
       return { key: sender.tab?.url ? jobKey(sender.tab.url) : "" };
     case "RUN_REPORT":
-      await chrome.storage.session.set({ [`lastRun:${sender.tab?.id ?? "x"}`]: msg.report });
+      await chrome.storage.session.set({
+        [`lastRun:${sender.tab?.id ?? "x"}`]: { ...msg.report, tabUrl: sender.tab?.url },
+      });
       return { ok: true };
     default:
       throw new Error("unknown message");

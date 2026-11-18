@@ -141,6 +141,8 @@ export function ChatThread({
                   onDismiss={(on) => chat.dismiss(k, on)}
                   onAsk={onSend}
                   onDownload={() => void chat.downloadResume()}
+                  onFillAgain={() => void chat.fillAgain(mi, pi)}
+                  jobTitle={data.report.job.title}
                 />
               );
             })}

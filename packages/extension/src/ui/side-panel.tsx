@@ -126,7 +126,7 @@ function App() {
   const [draft, setDraft] = useState("");
   const [collapse, setCollapse] = useState(0);
   const key = tab?.url ? jobKey(tab.url) : "";
-  const chat = useChat(report?.result?.runId, report?.result?.version, tab?.id);
+  const chat = useChat(report?.result?.runId, report?.result?.version, tab?.id, report?.tabUrl);
   const run = chat.data;
   const view = useMemo(
     () => (run && "report" in run ? buildRunView(run.report, run.state, run.master) : null),
@@ -189,7 +189,7 @@ function App() {
                 title={view.title}
                 company={view.company}
                 up={up}
-                pills={[`v${view.version + 1}`, `${view.pages} page${view.pages === 1 ? "" : "s"}`]}
+                pills={[`v${view.version}`, `${view.pages} page${view.pages === 1 ? "" : "s"}`]}
               />
               <ReportPanel
                 view={view}

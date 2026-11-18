@@ -167,6 +167,9 @@ export type ApplyResult = { ok: true; state: RunState; version: number } | { ok:
 
 export interface RunReport {
   url: string;
+  // The tab's top-frame URL when the run reported (set by the background): page
+  // sync only fills this job's form.
+  tabUrl?: string;
   title: string;
   company: string;
   jdSource: string;
