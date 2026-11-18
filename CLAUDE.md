@@ -34,7 +34,7 @@ side panel (report + chat) ── GET/POST /chat/:runId (NDJSON) ─────
   page sync (content script): REATTACH_RESUME / REFILL_ANSWER / REFILL_COVER_LETTER
 ```
 
-- **JD sourcing** (`lib/jd-cache.ts`): pasted override → JD on page → JD cached
+- **JD sourcing** (`packages/extension/src/lib/jd-cache.ts`): pasted override → JD on page → JD cached
   from the posting page (same job key; Lever `/apply`, Ashby `/application`) →
   most recent JD within 30 min (iframes) → none (keywords only).
 - **Keywords**: widget chips, sticky across jobs; sent as priority keywords.
@@ -56,14 +56,21 @@ side panel (report + chat) ── GET/POST /chat/:runId (NDJSON) ─────
 - **Run folder** (`lib/local/runs.ts`): each run's dir holds `master.tex`
   (snapshot), `report.json` (written once, never rewritten), `state.json`
   (source of truth for current edits/order/cover letter/answers/questions/
-  version) and `chat.json`. `GET /tailor/:id` is overlaid with `state.json`;
+  version) and `chat.json` (JSON files written tmp + rename). `GET /tailor/:id` is overlaid with `state.json`;
   `POST /answer` takes `tailorJobId` to merge wizard answers into the run.
 - **Review & chat**: widget is slim + "Review & chat →"; the side panel shows
   the report (`buildRunView`) and a chat whose replies may carry proposals
   (resume edits, cover letter, answers). Proposals are validated server-side
   (`proposals.ts`) and applied only on the user's Apply/Undo; each apply
   recompiles with the page-fit rule, bumps `version`, and the page re-syncs
-  (re-attach PDF, refill answers). One turn at a time per run (409 busy).
+  (re-attach PDF then re-apply the profile, refill answers) — only while the
+  tab still shows that run's job (`samePage`: `jobKey` of the tab vs the
+  `lastRun` tab URL); otherwise nothing is sent. A card the page didn't take
+  (step not on screen, different page, bridge down) gets **Fill again**, which
+  re-runs the same gated sync with the run's current value. Versions: the
+  tailoring is v0, panel and dashboard both show `state.version`. Chat prose
+  shows labels, never part ids (prompt rule + `nameIds` backstop in the
+  bridge). One turn at a time per run (409 busy).
   Dashboard detail shows runs, versions, report, transcript (`getRuns`). Spec:
   `docs/superpowers/specs/2026-11-16-review-and-chat-design.md`; approved
   mockups: `docs/superpowers/mockups/review-chat/`.
@@ -112,7 +119,7 @@ After changing extension code: rebuild, then ↻ reload at `chrome://extensions`
 | `packages/extension/src/content/wizard.ts` | `activeScope`, `findStepButton` (submit wins), `stepSignature`, `waitForStepChange`, `visibleErrors` |
 | `packages/extension/src/content/adapters/workday.ts` | Repeating Add sections, date spinbuttons, self-identify date |
 | `packages/extension/src/content/widget.ts` | Shadow-DOM widget (all dynamic text escaped); slim, coverage + "Review & chat →" |
-| `packages/extension/src/content/page-sync.ts` | Handles `REATTACH_RESUME`/`REFILL_ANSWER`/`REFILL_COVER_LETTER` after a chat apply; skips fields the user edited |
+| `packages/extension/src/content/page-sync.ts` | Handles `REATTACH_RESUME` (then re-applies the profile, skipping user-edited fields) / `REFILL_ANSWER` / `REFILL_COVER_LETTER` after a chat apply; chat values are explicit intent, so they overwrite even an edited field and then mark it touched. Never presses a button |
 | `packages/extension/src/ui/` | Side panel: `ReportPanel`, `ChatThread`, `ProposalCard`, `Composer`, `Diff`; `lib/use-chat.ts`, `ndjson.ts`, `page-sync.ts` |
 | `packages/extension/src/content/extractors/form.ts` | Live-DOM fields, label resolution, value-type inference |
 | `packages/extension/src/content/fill.ts` | Fill text/select/radio/checkbox/combobox/radiogroup/dropdown buttons/search prompts, `matchOption`, `readOptions`, file attach |
@@ -126,7 +133,7 @@ After changing extension code: rebuild, then ↻ reload at `chrome://extensions`
 | `packages/bridge/src/tailor-job.ts` | Reads `~/.applymate`, runs tailoring, saves, names the PDF |
 | `lib/local/runs.ts` | Write/read run folders, `scanRuns`, `runsForApplication` |
 | `lib/shared/run-view.ts`, `word-diff.ts`, `latex-text.ts` | Report view-model, word/marked diff, LaTeX→text; shared by panel + dashboard |
-| `lib/ui/tailwind-preset.cjs` | Design tokens shared by extension UI + dashboard (see `PRODUCT.md`) |
+| `lib/ui/tailwind-preset.cjs` | Design tokens shared by extension UI + dashboard (see `DESIGN.md`) |
 | `packages/dashboard/lib/data.ts` | `getRuns`: run report/versions/transcript for the application detail page |
 | `lib/local/compile-latex.ts` | tectonic + pdfLaTeX compat shim + page/height probe |
 | `lib/shared/constants.ts` | Field keyword table, autocomplete map, board patterns |
