@@ -2,11 +2,10 @@ import type { ReactNode } from "react";
 import type { Proposal } from "../../../../../lib/shared/types";
 import type { CardUi } from "../lib/use-chat";
 import { isResumeTarget } from "../lib/page-sync";
+import { FIT } from "../lib/chat-logic";
 import { Diff } from "./Diff";
 import { Icon } from "./Icon";
 
-// Apply refusals that are about length: offer a shorter retry.
-const FIT = /too long|doesn't fit|one page|page 2/i;
 
 const btn = "inline-flex items-center gap-1.5 h-7 px-2.5 text-small font-medium rounded-ctl border disabled:opacity-50 disabled:cursor-not-allowed";
 const primary = `${btn} bg-accent border-accent text-accent-fg hover:bg-accent-hover hover:border-accent-hover`;

@@ -142,7 +142,7 @@ function App() {
     if (!text.trim() || chat.streaming) return;
     setDraft("");
     setCollapse((n) => n + 1);
-    if (!(await chat.send(text))) setDraft(text);
+    await chat.send(text, setDraft);
   }
 
   useEffect(() => {
@@ -220,7 +220,8 @@ function App() {
             onChange={setDraft}
             onSend={() => void submit(draft)}
             onStop={chat.stop}
-            streaming={!!chat.streaming}
+            busy={!!chat.streaming}
+            streaming={!!chat.streaming && !chat.streaming.finishing}
             error={chat.sendError}
           />
         </div>

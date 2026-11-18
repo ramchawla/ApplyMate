@@ -1,15 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import type { RunView } from "../../../../../lib/shared/run-view";
 import type { Chat, RunData } from "../lib/use-chat";
+import { isOtherField, streamedText } from "../lib/chat-logic";
+import { COMPOSER_ID } from "./Composer";
 import { ProposalCard } from "./ProposalCard";
-
-const FENCE = "```proposals";
-
-// While streaming, the reply's proposals block is raw JSON: hide it (and a fence still arriving).
-function streamedText(text: string) {
-  const i = text.indexOf(FENCE);
-  return i >= 0 ? { text: text.slice(0, i).trimEnd(), preparing: true } : { text: text.replace(/`{1,3}[a-z]*$/, ""), preparing: false };
-}
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
@@ -73,16 +67,21 @@ export function ChatThread({
     }),
   );
 
+  const applyRef = useRef(chat.apply);
+  applyRef.current = chat.apply;
+  const busy = !!streaming;
   useEffect(() => {
+    if (!latest || busy) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || !latest || streaming) return;
+      // Not from the JD box, the token field or any other text field.
+      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || isOtherField(e.target, COMPOSER_ID)) return;
       e.preventDefault();
       const [mi, pi] = latest.split(":").map(Number);
-      void chat.apply(mi, pi);
+      void applyRef.current(mi, pi);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, [latest, busy]);
 
   // Follow the newest content unless the user scrolled up; sending snaps back down.
   useLayoutEffect(() => {
@@ -149,9 +148,15 @@ export function ChatThread({
         ),
       )}
 
-      {streaming && live && (
+      {streaming?.finishing && (
         <>
-          <User text={streaming.user} />
+          {streaming.user && <User text={streaming.user} />}
+          <p className="text-small text-text-3">{streaming.finishing}</p>
+        </>
+      )}
+      {streaming && !streaming.finishing && live && (
+        <>
+          {streaming.user && <User text={streaming.user} />}
           <Claude>
             <div className="whitespace-pre-wrap break-words">
               {live.text}

@@ -5,11 +5,13 @@ export const COMPOSER_ID = "composer";
 
 // Enter sends, Shift+Enter is a newline, Esc stops a streaming reply.
 // ⌘/Ctrl+Enter is left to bubble: it applies the latest card.
+// `busy`: a turn is running (streaming, or finishing one that was stopped); `streaming`: it can be stopped.
 export function Composer({
   value,
   onChange,
   onSend,
   onStop,
+  busy,
   streaming,
   error,
 }: {
@@ -17,6 +19,7 @@ export function Composer({
   onChange: (text: string) => void;
   onSend: () => void;
   onStop: () => void;
+  busy: boolean;
   streaming: boolean;
   error: string;
 }) {
@@ -40,9 +43,9 @@ export function Composer({
   // Back to the box once a reply ends (or was stopped and the text restored).
   const was = useRef(false);
   useEffect(() => {
-    if (was.current && !streaming) ref.current?.focus();
-    was.current = streaming;
-  }, [streaming]);
+    if (was.current && !busy) ref.current?.focus();
+    was.current = busy;
+  }, [busy]);
 
   return (
     <div className="flex-none px-3 pt-2.5 pb-3 border-t border-border">
@@ -52,9 +55,9 @@ export function Composer({
           ref={ref}
           rows={1}
           value={value}
-          disabled={streaming}
+          disabled={busy}
           aria-label="Message Claude"
-          placeholder={streaming ? "Claude is replying…" : "Ask about this application or suggest a change"}
+          placeholder={busy ? "Claude is replying…" : "Ask about this application or suggest a change"}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key !== "Enter" || e.shiftKey || e.metaKey || e.ctrlKey || e.nativeEvent.isComposing) return;
@@ -77,7 +80,7 @@ export function Composer({
             type="button"
             aria-label="Send"
             onClick={onSend}
-            disabled={!value.trim()}
+            disabled={busy || !value.trim()}
             className="flex-none grid place-items-center w-7 h-7 rounded-ctl bg-accent text-accent-fg hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Icon name="up" />
