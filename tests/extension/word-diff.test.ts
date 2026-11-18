@@ -28,6 +28,22 @@ describe("wordDiff", () => {
       { op: "same", text: "API fast" },
     ]);
   });
+  it("appending text keeps the old last word unchanged", () => {
+    expect(wordDiff("Built 15 services", "Built 15 services today")).toEqual([
+      { op: "same", text: "Built 15 services" },
+      { op: "add", text: " today" },
+    ]);
+    expect(wordDiff("x.", "x. Also y.")).toEqual([
+      { op: "same", text: "x." },
+      { op: "add", text: " Also y." },
+    ]);
+  });
+  it("removing trailing text keeps the remaining last word unchanged", () => {
+    expect(wordDiff("Built 15 services today", "Built 15 services")).toEqual([
+      { op: "same", text: "Built 15 services" },
+      { op: "del", text: " today" },
+    ]);
+  });
   it("keeps leading and trailing whitespace", () => {
     const d = wordDiff("  a b  ", "  a c  ");
     expect(join(d, "same", "del")).toBe("  a b  ");
@@ -39,6 +55,8 @@ describe("wordDiff", () => {
       ["a b c d", "d c b a"],
       ["", "only added "],
       ["only removed\t", ""],
+      ["Built 15 services", "Built 15 services today"],
+      ["a  b", "a b  c"],
     ];
     for (const [b, a] of cases) {
       const d = wordDiff(b, a);
