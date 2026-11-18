@@ -10,13 +10,13 @@ export function BridgeTokenField() {
   }, []);
 
   return (
-    <div className="space-y-1">
-      <h3 className="text-sm font-medium">Bridge Token</h3>
-      <p className="text-xs text-gray-500">
+    <div className="grid gap-1">
+      <span className="text-small text-text-2">Bridge token</span>
+      <p className="text-meta text-text-3">
         Pairing is automatic. Only paste the token (~/.applymate/bridge-token) if
         auto-pairing fails.
       </p>
-      <div className="flex gap-1">
+      <div className="flex gap-1.5">
         <input
           type="password"
           placeholder="paste bridge token"
@@ -25,14 +25,14 @@ export function BridgeTokenField() {
             setToken(e.target.value);
             setSaved(false);
           }}
-          className="flex-1 border rounded px-2 py-1 text-xs"
+          className="flex-1 min-w-0 h-7 px-2 text-small bg-surface text-text border border-border-strong rounded-ctl"
         />
         <button
           onClick={async () => {
             await saveBridgeToken(token);
             setSaved(true);
           }}
-          className="bg-gray-700 text-white px-2 rounded text-xs"
+          className="h-7 px-2.5 text-small font-medium bg-surface text-text border border-border-strong rounded-ctl hover:bg-surface-2"
         >
           {saved ? "Saved" : "Save"}
         </button>

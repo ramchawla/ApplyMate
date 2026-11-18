@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/tailwind.css";
-import { BridgeStatus } from "./components/BridgeStatus";
+import { BridgeDot, useBridgeUp } from "./components/BridgeStatus";
 import { BridgeTokenField } from "./components/BridgeTokenField";
+import { Icon } from "./components/Icon";
+import { ReportPanel } from "./components/ReportPanel";
 import { jobKey } from "../lib/jd-cache";
+import { bridgeFetch } from "../utils/bridge";
+import { buildRunView, type RunView } from "../../../../lib/shared/run-view";
 import type { RunReport } from "../types";
+
+type Loaded = { view: RunView; letterPdf: boolean } | { error: string } | null;
 
 function useActiveTab() {
   const [tab, setTab] = useState<chrome.tabs.Tab | null>(null);
@@ -22,12 +28,129 @@ function useActiveTab() {
   return tab;
 }
 
+// GET /chat/:runId → the run's review; null while loading.
+function useRun(runId: string | undefined, version: number | undefined): Loaded {
+  const [run, setRun] = useState<Loaded>(null);
+  useEffect(() => {
+    setRun(null);
+    if (!runId) return;
+    let live = true;
+    (async () => {
+      try {
+        const res = await bridgeFetch(`/chat/${encodeURIComponent(runId)}`);
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+        const view = buildRunView(body.report, body.state, body.master ?? {});
+        if (live) setRun({ view, letterPdf: !!body.report.wantCoverLetterPdf });
+      } catch (err) {
+        if (live) setRun({ error: (err as Error).message });
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [runId, version]);
+  return run;
+}
+
+function Header({ title, company, up, pills }: { title: string; company: string; up: boolean | null; pills?: [string, string] }) {
+  return (
+    <div className="flex gap-3 px-4 pt-3.5 pb-2.5">
+      <div className="flex-1 min-w-0">
+        <div className="text-title font-semibold tracking-tight leading-[1.3] [text-wrap:balance]">{title || "Last run"}</div>
+        {company && <div className="text-small text-text-2 mt-0.5">{company}</div>}
+      </div>
+      <div className="flex flex-col items-end gap-1.5">
+        <BridgeDot up={up} on="Bridge" off="Bridge offline" />
+        {pills && (
+          <span className="flex gap-1">
+            <span className="text-meta font-medium text-accent-text bg-accent-soft rounded-full px-2 py-0.5">{pills[0]}</span>
+            <span className="text-meta font-medium text-text-2 bg-surface-2 border border-border rounded-full px-2 py-px">
+              {pills[1]}
+            </span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Skeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading the review" className="px-4 pb-3 grid gap-2">
+      <div className="skeleton h-2.5 w-2/3" />
+      <div className="skeleton h-2 w-full" />
+      <div className="flex gap-3 pt-2">
+        {[56, 56, 40, 52, 60].map((w, i) => (
+          <div key={i} className="skeleton h-2.5" style={{ width: w }} />
+        ))}
+      </div>
+      <div className="grid gap-2 pt-3">
+        <div className="skeleton h-2.5 w-4/5" />
+        <div className="skeleton h-2.5 w-3/5" />
+        <div className="skeleton h-2.5 w-2/3" />
+      </div>
+    </div>
+  );
+}
+
+// What the content script reported, for a run the bridge can't show (yet).
+function RunSummary({ report }: { report: RunReport }) {
+  const res = report.result;
+  return (
+    <div className="px-4 pb-3 grid gap-1 text-small text-text-2">
+      <p>
+        JD: {report.jdSource} · {report.filled} fields filled instantly
+        {report.needsYou.length ? ` · ${report.needsYou.length} required fields need you` : ""}
+      </p>
+      {report.error && <p className="text-err">{report.error}</p>}
+      {res && (
+        <p>
+          {res.fileName} · {res.pages} page · saved to {res.savedTo}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex-1 flex flex-col justify-center px-7">
+      <h2 className="flex items-center gap-2 mt-3.5 mb-1.5 text-title font-semibold tracking-tight">
+        <Icon name="zap" className="w-[18px] h-[18px] text-accent" />
+        Nothing tailored on this tab yet
+      </h2>
+      <p className="mb-[18px] text-text-2">
+        Press ⚡ on the application page. When the resume is ready, its review and a chat with Claude show up here.
+      </p>
+      <ol className="grid gap-2.5 text-text-2">
+        {[
+          "Open the job's application form",
+          "Press ⚡ in the ApplyMate widget",
+          "Review what changed, ask for fixes, then submit on the site",
+        ].map((s, i) => (
+          <li key={i} className="flex gap-2.5">
+            <span className="flex-none w-5 h-5 rounded-full border border-border-strong grid place-items-center text-meta text-text-3">
+              {i + 1}
+            </span>
+            {s}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function App() {
   const tab = useActiveTab();
+  const up = useBridgeUp();
   const [report, setReport] = useState<RunReport | null>(null);
   const [jd, setJd] = useState("");
   const [saved, setSaved] = useState(false);
+  // ponytail: Ask fills this; Task 13's composer reads it.
+  const [draft, setDraft] = useState("");
   const key = tab?.url ? jobKey(tab.url) : "";
+  const run = useRun(report?.result?.runId, report?.result?.version);
 
   useEffect(() => {
     if (tab?.id === undefined) return;
@@ -58,118 +181,73 @@ function App() {
     setSaved(true);
   }
 
-  const res = report?.result;
+  const loading = !!report?.result?.runId && run === null;
+  const view = run && "view" in run ? run : null;
+  const failed = run && "error" in run ? run.error : "";
+
   return (
-    <div className="p-3 space-y-4 text-sm bg-white min-h-screen">
-      <div className="flex items-center justify-between">
-        <h1 className="font-bold text-base">⚡ ApplyMate</h1>
-        <BridgeStatus />
-      </div>
-
-      {!report && (
-        <p className="text-gray-500 text-xs">
-          Click ⚡ Autofill &amp; Tailor on an application page. The run's details show up here.
-        </p>
-      )}
-
-      {report && (
-        <section className="space-y-2">
-          <h2 className="font-semibold">
-            {[report.title, report.company].filter(Boolean).join(" · ") || "Last run"}
-          </h2>
-          <p className="text-xs text-gray-600">
-            JD: {report.jdSource} · {report.filled} fields filled instantly
-            {report.needsYou.length
-              ? ` · ${report.needsYou.length} required fields need you`
-              : ""}
-          </p>
-          {report.error && <p className="text-xs text-red-700">{report.error}</p>}
-          {res && (
+    <div className="flex flex-col h-screen">
+      {!report ? (
+        <EmptyState />
+      ) : (
+        <div className="flex-none border-b border-border">
+          {view ? (
             <>
-              <p className="text-xs">
-                📄 {res.fileName} · {res.pages} page · saved to <code>{res.savedTo}</code>
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {res.keywords.injected.map((k) => (
-                  <span
-                    key={`i-${k.keyword}`}
-                    className="bg-green-100 text-green-800 rounded px-1.5 text-xs"
-                    title={k.where}
-                  >
-                    ✓ {k.keyword}
-                  </span>
-                ))}
-                {res.keywords.skipped.map((k) => (
-                  <span
-                    key={`s-${k.keyword}`}
-                    className="bg-gray-100 text-gray-600 rounded px-1.5 text-xs"
-                    title={k.reason}
-                  >
-                    ✗ {k.keyword}
-                  </span>
-                ))}
-              </div>
-              {res.warnings.length > 0 && (
-                <ul className="text-xs text-amber-700 list-disc ml-4">
-                  {res.warnings.map((w, i) => (
-                    <li key={i}>{w}</li>
-                  ))}
-                </ul>
+              <Header
+                title={view.view.title}
+                company={view.view.company}
+                up={up}
+                pills={[`v${view.view.version + 1}`, `${view.view.pages} page${view.view.pages === 1 ? "" : "s"}`]}
+              />
+              <ReportPanel view={view.view} letterPdf={view.letterPdf} onAsk={setDraft} />
+            </>
+          ) : (
+            <>
+              <Header title={report.title} company={report.company} up={up} />
+              {loading ? <Skeleton /> : <RunSummary report={report} />}
+              {failed && (
+                <p role="alert" className="mx-4 mb-3 px-2.5 py-2 rounded-ctl bg-err-bg text-small text-err">
+                  Couldn't load the review: {failed}. Is the bridge running?
+                </p>
               )}
-              <details>
-                <summary className="cursor-pointer text-xs font-medium">
-                  Bullet changes ({res.edits.length})
-                </summary>
-                {res.edits.map((e) => (
-                  <div key={e.id} className="border rounded p-2 my-1 text-xs space-y-1">
-                    <div className="text-gray-400">
-                      {e.id}
-                      {e.reverted ? ` — reverted: ${e.reverted}` : ""}
-                    </div>
-                    <div className="line-through text-gray-400">{e.before}</div>
-                    <div>{e.after}</div>
-                  </div>
-                ))}
-              </details>
-              <details>
-                <summary className="cursor-pointer text-xs font-medium">Cover letter</summary>
-                <textarea
-                  readOnly
-                  value={res.coverLetter}
-                  className="w-full border rounded p-1 h-40 text-xs"
-                />
-              </details>
             </>
           )}
-        </section>
+        </div>
       )}
 
-      <section className="space-y-1">
-        <h2 className="font-semibold text-xs">Paste JD for this page</h2>
-        <p className="text-xs text-gray-500">Overrides the auto-detected JD for this job.</p>
-        <textarea
-          value={jd}
-          onChange={(e) => {
-            setJd(e.target.value);
-            setSaved(false);
-          }}
-          className="w-full border rounded p-1 h-24 text-xs"
-          placeholder="Paste the job description…"
-        />
-        <button
-          onClick={() => void saveJd(jd)}
-          disabled={!key}
-          className="bg-gray-800 text-white rounded px-2 py-1 text-xs"
-        >
-          {saved ? "Saved ✓" : "Save JD"}
-        </button>
-      </section>
+      {/* Chat thread + composer (Task 13). */}
+      {report && <div className="flex-1 overflow-y-auto" data-draft={draft} />}
 
-      <details>
-        <summary className="cursor-pointer text-xs text-gray-500">
-          Bridge pairing (automatic; manual fallback)
+      <details className="flex-none border-t border-border" open={!report}>
+        <summary className="flex items-center gap-2 px-4 py-2.5 text-small text-text-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          <Icon name="sliders" />
+          Job description and bridge
+          <span className="flex-1" />
+          <BridgeDot up={up} on="Bridge connected" off="Bridge offline: run pnpm bridge" />
         </summary>
-        <BridgeTokenField />
+        <div className="grid gap-2.5 px-4 pb-3.5">
+          <label className="grid gap-1 text-small text-text-2">
+            Paste the job description if the page doesn't show it
+            <textarea
+              value={jd}
+              onChange={(e) => {
+                setJd(e.target.value);
+                setSaved(false);
+              }}
+              className="w-full min-h-16 resize-y px-2 py-1.5 text-small bg-surface text-text border border-border-strong rounded-ctl placeholder:text-text-3"
+              placeholder="Paste the full posting here"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => void saveJd(jd)}
+            disabled={!key}
+            className="justify-self-start h-7 px-2.5 text-small font-medium bg-accent text-accent-fg rounded-ctl hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saved ? "Saved" : "Save job description"}
+          </button>
+          <BridgeTokenField />
+        </div>
       </details>
     </div>
   );

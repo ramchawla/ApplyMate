@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { isBridgeUp } from "../../utils/bridge";
 
-export function BridgeStatus() {
+// Polls /health every 3s; null until the first answer.
+export function useBridgeUp(): boolean | null {
   const [up, setUp] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -18,15 +19,19 @@ export function BridgeStatus() {
     };
   }, []);
 
-  if (up === null) return null;
+  return up;
+}
 
+export function BridgeDot({ up, on, off }: { up: boolean | null; on: string; off: string }) {
+  if (up === null) return null;
+  const c = up ? "var(--ok)" : "var(--err)";
   return (
-    <div
-      className={`text-xs px-2 py-1 rounded ${
-        up ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-      }`}
-    >
-      {up ? "● Bridge connected" : "● Bridge offline — run `pnpm bridge`"}
-    </div>
+    <span className="inline-flex items-center gap-1.5 text-meta text-text-3">
+      <span
+        className="w-[7px] h-[7px] rounded-full"
+        style={{ background: c, boxShadow: `0 0 0 3px color-mix(in srgb, ${c} 18%, transparent)` }}
+      />
+      {up ? on : off}
+    </span>
   );
 }

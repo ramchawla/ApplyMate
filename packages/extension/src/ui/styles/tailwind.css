@@ -1,3 +1,36 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Side panel base (the dashboard keeps its own until it is restyled). Tokens: lib/ui/tailwind-preset.cjs */
+@layer base {
+  :root { color-scheme: light dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    @apply bg-surface text-text font-sans text-body;
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+  :focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--r-ctl); }
+
+  /* word diff: proportional text, never monospace */
+  del, ins { border-radius: 3px; padding: 0 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  del { @apply bg-del-bg text-del-text; text-decoration: line-through; text-decoration-thickness: 1px; }
+  ins { @apply bg-add-bg text-add-text; text-decoration: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+}
+
+@layer components {
+  .skeleton {
+    @apply rounded-chip;
+    background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2));
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+}
