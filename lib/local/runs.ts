@@ -69,7 +69,8 @@ function allRuns(appsDir: string): { dir: string; report: RunFile }[] {
     const dir = join(appsDir, name);
     try {
       const report = readJson(dir, "report.json") as RunFile;
-      return report.runId ? [{ dir, report }] : [];
+      // createdAt sorts runs; a report without it can't be placed, so it's skipped like a legacy one.
+      return report.runId && typeof report.createdAt === "string" ? [{ dir, report }] : [];
     } catch {
       return [];
     }

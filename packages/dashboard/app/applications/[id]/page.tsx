@@ -1,17 +1,13 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
-import { getApplicationDetail, getRuns } from "../../../lib/data";
+import { getApplicationDetail, getRuns, runVersions, untaggedVersions, type VersionTag } from "../../../lib/data";
 import { RunReport, CoverageBar, Section, box } from "../../../components/RunReport";
 import { ChatTranscript } from "../../../components/ChatTranscript";
 import { Icon } from "../../../components/Icon";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// report_json of a version row: tailor-job writes {runId, version: 0, ...} for v0,
-// chat writes {runId, version, label}. Older rows carry no runId and match no run.
-type Tag = { runId?: string; version?: number; label?: string };
 
 // SQLite datetime('now') is UTC without a zone; run createdAt is ISO.
 const toDate = (s: string) => new Date(/[TZ]/.test(s) ? s : `${s.replace(" ", "T")}Z`);
@@ -81,7 +77,6 @@ export default function ApplicationDetail({
   if (!detail) notFound();
   const { app, versions } = detail;
   const runs = getRuns(app.id);
-  const submitted = app.status === "applied";
 
   // Pre-run-folder application: today's version list, restyled.
   if (!runs.length) {
@@ -118,10 +113,11 @@ export default function ApplicationDetail({
 
   const run = runs.find((r) => r.runId === searchParams.run) ?? runs[0];
   const { view } = run;
-  const tag = (v: (typeof versions)[number]) => v.report as Tag;
-  const rowsOf = (runId: string) =>
-    versions.filter((v) => tag(v).runId === runId).sort((a, b) => (tag(b).version ?? 0) - (tag(a).version ?? 0));
-  const runRows = rowsOf(run.runId);
+  const tag = (v: (typeof versions)[number]) => v.report as VersionTag;
+  const runRows = runVersions(versions, run.runId);
+  const earlier = untaggedVersions(versions);
+  // The newest resume row. Letter/answer applies bump the run's version without a row,
+  // so this is "the current resume", not necessarily version N in the header.
   const current = runRows[0];
 
   return (
@@ -133,10 +129,7 @@ export default function ApplicationDetail({
           <span key="c">{view.company}</span>,
           <Status key="s" status={app.status} />,
           <span key="d">{day(run.createdAt)}</span>,
-          <span key="v">
-            Version {view.version}
-            {submitted ? " submitted" : ""}
-          </span>,
+          <span key="v">Version {view.version}</span>,
         ]}
         jobUrl={app.jobUrl}
         pdf={current && `/resumes/${current.id}`}
@@ -145,7 +138,7 @@ export default function ApplicationDetail({
 
       <div className="grid gap-8 items-start mt-6 min-[1000px]:grid-cols-[minmax(0,1fr)_380px]">
         <div>
-          <RunReport view={view} submitted={submitted} />
+          <RunReport view={view} />
         </div>
 
         <aside>
@@ -167,7 +160,7 @@ export default function ApplicationDetail({
                       <b className="block font-medium truncate">{t.version ? (t.label ?? "Chat edit") : "Tailored"}</b>
                       <span className="text-small text-text-3">
                         {t.version ? "Chat" : "⚡ run"}, {time(v.createdAt)}
-                        {isCurrent ? ". Current" : ""}
+                        {isCurrent ? ". Current resume" : ""}
                       </span>
                     </div>
                     <Link
@@ -180,14 +173,31 @@ export default function ApplicationDetail({
                   </div>
                 );
               })}
-              {!runRows.length && <p className="px-4 py-3 text-small text-text-3">No saved versions.</p>}
+              {!runRows.length && (
+                <p className="px-4 py-3 text-small text-text-3 border-b border-border last:border-b-0">No saved versions.</p>
+              )}
+              {earlier.length > 0 && (
+                <>
+                  <div className="px-3.5 pt-2.5 pb-1 text-meta font-semibold text-text-3">
+                    Earlier versions
+                  </div>
+                  {earlier.map((v) => (
+                    <div key={v.id} className={row}>
+                      <Link href={`/resumes/${v.id}`} className="flex-1 font-medium hover:underline">
+                        Version {v.versionNumber}
+                      </Link>
+                      <span className="text-small text-text-3">{day(v.createdAt)}</span>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </Section>
 
           <Section title="Runs" n={runs.length}>
             <div className={box}>
               {runs.map((r) => {
-                const n = rowsOf(r.runId).length;
+                const n = runVersions(versions, r.runId).length;
                 return (
                   <Link
                     key={r.runId}

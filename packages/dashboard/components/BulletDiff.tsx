@@ -34,7 +34,11 @@ export function BulletDiff({ bullets }: { bullets: Bullet[] }) {
           <div className="text-text-2 leading-[1.65] [&_b]:text-text [&_b]:font-semibold">
             <Diff before={b.original ?? b.before ?? ""} after={b.revised ?? b.after ?? ""} />
           </div>
-          {b.reverted && <div className="text-small text-warn">Reverted: {b.reverted}</div>}
+          {b.reverted && (
+            <div className="text-small text-warn">
+              {/^reverted\b/i.test(b.reverted) ? b.reverted.replace(/^r/, "R") : `Reverted: ${b.reverted}`}
+            </div>
+          )}
           {b.plausibilityScore !== undefined && (
             <div className={`text-small ${b.plausibilityScore < 0.7 ? "text-err" : "text-text-3"}`}>
               {Math.round(b.plausibilityScore * 100)}% confidence

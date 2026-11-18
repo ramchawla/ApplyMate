@@ -62,6 +62,9 @@ beforeAll(async () => {
   // Corrupt state.json: skipped, not thrown.
   await write("2026-11-13-acme-sre-3", "run-bad", "2026-11-13T11:00:00.000Z");
   writeFileSync(join(apps, "2026-11-13-acme-sre-3", "state.json"), "{not json");
+  // Malformed report.json (runId but no createdAt): skipped, can't be sorted.
+  mkdirSync(join(apps, "2026-11-13-acme-sre-4"));
+  writeFileSync(join(apps, "2026-11-13-acme-sre-4", "report.json"), JSON.stringify({ applicationId: "app_1", runId: "run-x" }));
   // Legacy folder: report.json without runId.
   mkdirSync(join(apps, "2026-09-28-acme-sre"));
   writeFileSync(join(apps, "2026-09-28-acme-sre", "report.json"), JSON.stringify({ applicationId: "app_1" }));
@@ -88,5 +91,21 @@ describe("getRuns", () => {
     expect(errors).toHaveBeenCalledTimes(1);
     expect(getRuns("app_other")).toEqual([]);
     errors.mockRestore();
+  });
+});
+
+describe("runVersions / untaggedVersions", () => {
+  it("groups version rows by run, newest first; rows without a runId are earlier versions", async () => {
+    const { runVersions, untaggedVersions } = await import("../lib/data");
+    const rows = [
+      { id: "legacy", report: { perBullet: [] } },
+      { id: "old-v0", report: { runId: "run-old", version: 0 } },
+      { id: "new-v0", report: { runId: "run-new", version: 0 } },
+      { id: "new-v2", report: { runId: "run-new", version: 2, label: "Summary" } },
+      { id: "new-v1", report: { runId: "run-new", version: 1, label: "Undo: Summary" } },
+    ];
+    expect(runVersions(rows, "run-new").map((r) => r.id)).toEqual(["new-v2", "new-v1", "new-v0"]);
+    expect(runVersions(rows, "run-old").map((r) => r.id)).toEqual(["old-v0"]);
+    expect(untaggedVersions(rows).map((r) => r.id)).toEqual(["legacy"]);
   });
 });

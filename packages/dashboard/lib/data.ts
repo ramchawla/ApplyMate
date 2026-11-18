@@ -45,6 +45,23 @@ export function getAnalytics() {
   return analytics(db());
 }
 
+// report_json of a version row: tailor-job writes {runId, version: 0, ...} for v0,
+// chat writes {runId, version, label}. Older rows carry no runId.
+export type VersionTag = { runId?: string; version?: number; label?: string };
+const tag = (v: { report: unknown }) => (v.report ?? {}) as VersionTag;
+
+// One run's resume versions, newest (the current resume) first.
+export function runVersions<T extends { report: unknown }>(versions: T[], runId: string): T[] {
+  return versions
+    .filter((v) => tag(v).runId === runId)
+    .sort((a, b) => (tag(b).version ?? 0) - (tag(a).version ?? 0));
+}
+
+// Rows from before run folders (no runId): shown as "Earlier versions".
+export function untaggedVersions<T extends { report: unknown }>(versions: T[]): T[] {
+  return versions.filter((v) => !tag(v).runId);
+}
+
 // Run folders for one application, newest first. Read at request time; an
 // unreadable run is logged and skipped so one bad folder never blanks the page.
 export function getRuns(

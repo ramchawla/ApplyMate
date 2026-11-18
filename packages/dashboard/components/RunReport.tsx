@@ -141,17 +141,14 @@ function Change({ c }: { c: RunView["changes"][number] }) {
   );
 }
 
-export function RunReport({ view, submitted }: { view: RunView; submitted: boolean }) {
+export function RunReport({ view }: { view: RunView }) {
   return (
     <>
       <Section title="Keywords" n={`${view.keywords.length} from the job description`}>
         {view.keywords.length ? <Keywords view={view} /> : <div className={box}><Empty>No job keywords for this run.</Empty></div>}
       </Section>
 
-      <Section
-        title="Changes from your master resume"
-        n={`${submitted ? "as submitted in" : "as of"} version ${view.version}`}
-      >
+      <Section title="Changes from your master resume" n={`as of version ${view.version}`}>
         <div className={box}>
           {view.changes.length ? (
             view.changes.map((c) => <Change key={c.id} c={c} />)
