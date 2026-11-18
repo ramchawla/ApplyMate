@@ -93,6 +93,13 @@ describe("chat routes", () => {
     expect((await post("/chat/run-1", { message: "  " })).status).toBe(400);
   });
 
+  it("GET returns every part's master text from the run's own master.tex", async () => {
+    const got = await (await fetch(`${base()}/chat/run-1`, { headers: auth })).json();
+    const parts = parseResume(masterTex).parts;
+    expect(got.master).toEqual(Object.fromEntries(parts.map((p) => [p.id, p.text])));
+    expect(got.master.summary).toContain("Backend engineer");
+  });
+
   it("streams NDJSON events ending in done, then GET shows the chat", async () => {
     replyText =
       'Tighter summary.\n\n```proposals\n[{"target":"summary","after":"Reliability engineer.","why":"w"},' +

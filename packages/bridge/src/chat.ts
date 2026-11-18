@@ -186,11 +186,16 @@ export function makeChat(opts: {
       return !!dirOf(runId);
     },
 
-    get(runId: string): { report: RunFile; state: RunState; chat: ChatMessage[] } | null {
+    // `master`: every editable part's text in this run's master.tex snapshot, so the UI can
+    // diff a part chat changed that tailoring never touched.
+    get(
+      runId: string,
+    ): { report: RunFile; state: RunState; chat: ChatMessage[]; master: Record<string, string> } | null {
       if (!dirOf(runId)) return null;
       try {
-        const { report, state, chat } = load(runId);
-        return { report, state, chat };
+        const { report, state, chat, masterTex } = load(runId);
+        const master = Object.fromEntries(parseResume(masterTex).parts.map((p) => [p.id, p.text]));
+        return { report, state, chat, master };
       } catch (err) {
         console.error(`[ApplyMate] ${(err as Error).message}`);
         return null;
