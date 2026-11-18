@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -92,5 +92,31 @@ describe("run folders", () => {
     expect(scanRuns(apps).size).toBe(0);
     expect(runsForApplication(apps, "app_1")).toEqual([]);
     expect(scanRuns(join(apps, "missing")).size).toBe(0);
+  });
+});
+
+describe("run writes", () => {
+  it("state.json and chat.json are replaced by rename, never rewritten in place", async () => {
+    const dir = join(tmpApps(), "run");
+    await writeRun(dir, files(report()));
+    writeChat(dir, []);
+    // A hard link shares the inode: an in-place write would change it too.
+    linkSync(join(dir, "state.json"), join(dir, "state-link.json"));
+    linkSync(join(dir, "chat.json"), join(dir, "chat-link.json"));
+    writeState(dir, { ...state, version: 7 });
+    writeChat(dir, [{ role: "user", text: "hi", at: 1 }]);
+    expect(readRun(dir).state.version).toBe(7);
+    expect(readRun(dir).chat).toHaveLength(1);
+    expect(JSON.parse(readFileSync(join(dir, "state-link.json"), "utf8")).version).toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, "chat-link.json"), "utf8"))).toEqual([]);
+    expect(readdirSync(dir).filter((f) => f.includes(".tmp"))).toEqual([]);
+  });
+
+  it("writes the v0 cover-letter.pdf when tailoring made one", async () => {
+    const apps = tmpApps();
+    await writeRun(join(apps, "a"), { ...files(report()), coverLetterPdf: Buffer.from("%PDF-letter") });
+    expect(readFileSync(join(apps, "a", "cover-letter.pdf"), "utf8")).toBe("%PDF-letter");
+    await writeRun(join(apps, "b"), files(report()));
+    expect(existsSync(join(apps, "b", "cover-letter.pdf"))).toBe(false);
   });
 });

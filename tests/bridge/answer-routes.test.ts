@@ -81,13 +81,17 @@ describe("/answer joins the run", () => {
   const q2 = { fieldId: "q2", label: "Why us?", type: "text", required: true };
   const answerBody = { ...body, fields: [q2] };
 
-  async function serve(runId: string, tailor: () => Promise<ReturnType<typeof tailorOutput>>) {
+  async function serve(
+    runId: string,
+    tailor: () => Promise<ReturnType<typeof tailorOutput>>,
+    answer = async (req: { fields: { fieldId: string }[] }) => ({ answers: req.fields.map((f) => ({ fieldId: f.fieldId, value: "Because" })) }),
+  ) {
     const s = await setupRun(runId, [q1]);
     const srv = createServer({
       token: TOKEN,
       chat: makeChat(s),
       tailor,
-      answer: async (req) => ({ answers: req.fields.map((f) => ({ fieldId: f.fieldId, value: "Because" })) }),
+      answer,
     });
     await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
     const a = srv.address();
@@ -118,6 +122,21 @@ describe("/answer joins the run", () => {
       expect(t.state().answers).toEqual({ q2: "Because" });
       expect(t.state().questions.map((q) => q.fieldId)).toEqual(["q1", "q2"]);
       expect(t.state().version).toBe(0);
+    } finally {
+      await new Promise<void>((r) => t.srv.close(() => r()));
+    }
+  });
+
+  it("/answer with no answers still joins the asked questions to the run (chat can take them)", async () => {
+    const t = await serve("run-e", async () => tailorOutput("run-e", [q1]), async () => ({ answers: [] }));
+    try {
+      const tj = await t.post("/tailor", tailorBody);
+      await t.wait(`/tailor/${tj}`);
+      const aj = await t.post("/answer", { ...answerBody, tailorJobId: tj });
+      expect(await t.wait(`/answer/${aj}`)).toMatchObject({ status: "done", answers: [] });
+      await t.wait(`/tailor/${tj}`, (s: any) => s.result?.questions?.length === 2);
+      expect(t.state().questions.map((q) => q.fieldId)).toEqual(["q1", "q2"]);
+      expect(t.state().answers).toEqual({});
     } finally {
       await new Promise<void>((r) => t.srv.close(() => r()));
     }

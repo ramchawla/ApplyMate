@@ -25,7 +25,7 @@ export async function pollUntil(
   check: () => Promise<boolean>,
   alive: () => boolean,
   every = 2000,
-  cap = 180_000,
+  cap = 130_000, // just past the bridge's 120 s stream timeout
 ): Promise<"done" | "timeout" | "cancelled"> {
   for (let t = 0; t < cap; t += every) {
     await new Promise((r) => setTimeout(r, every));

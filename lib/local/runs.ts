@@ -1,10 +1,17 @@
 // One tailoring run = one folder under ~/.applymate/applications/. The folder
 // is self-describing (report.json carries runId/applicationId), so the bridge
 // after a restart and the dashboard find runs by scanning, no extra index.
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ChatMessage, RunFile, RunState } from "../shared/types";
+
+// Readers (dashboard, a concurrent bridge request) see the old file or the new one, never half.
+function writeJsonAtomic(dir: string, file: string, data: unknown): void {
+  const tmp = join(dir, `.${file}.${process.pid}.tmp`);
+  writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+  renameSync(tmp, join(dir, file));
+}
 
 export function uniqueRunDir(appsDir: string, base: string): string {
   let dir = join(appsDir, base);
@@ -20,6 +27,7 @@ export async function writeRun(
     masterTex: string;
     resumeTex: string;
     resumePdf: Buffer;
+    coverLetterPdf?: Buffer;
     coverLetter: string;
     jd: string;
   },
@@ -27,14 +35,15 @@ export async function writeRun(
   await mkdir(dir, { recursive: true });
   await Promise.all([
     writeFile(join(dir, "master.tex"), f.masterTex, "utf8"),
-    writeFile(join(dir, "state.json"), JSON.stringify(f.state, null, 2), "utf8"),
     writeFile(join(dir, "resume.tex"), f.resumeTex, "utf8"),
     writeFile(join(dir, "resume.pdf"), f.resumePdf),
+    ...(f.coverLetterPdf ? [writeFile(join(dir, "cover-letter.pdf"), f.coverLetterPdf)] : []),
     writeFile(join(dir, "cover-letter.md"), f.coverLetter, "utf8"),
     writeFile(join(dir, "jd.md"), f.jd, "utf8"),
   ]);
+  writeJsonAtomic(dir, "state.json", f.state);
   // Last: report.json is what indexes a run, so a half-written folder is never found.
-  await writeFile(join(dir, "report.json"), JSON.stringify(f.report, null, 2), "utf8");
+  writeJsonAtomic(dir, "report.json", f.report);
 }
 
 const readJson = (dir: string, file: string) =>
@@ -55,11 +64,11 @@ export function readRun(dir: string): {
 }
 
 export function writeState(dir: string, state: RunState): void {
-  writeFileSync(join(dir, "state.json"), JSON.stringify(state, null, 2), "utf8");
+  writeJsonAtomic(dir, "state.json", state);
 }
 
 export function writeChat(dir: string, chat: ChatMessage[]): void {
-  writeFileSync(join(dir, "chat.json"), JSON.stringify(chat, null, 2), "utf8");
+  writeJsonAtomic(dir, "chat.json", chat);
 }
 
 // Pre-run-folder applications (report.json without runId) are skipped.

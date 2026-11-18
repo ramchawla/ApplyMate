@@ -267,10 +267,12 @@ export function createServer(options: ServerOptions = {}): Server {
           const tailorJobId = s((parsed as Record<string, unknown>).tailorJobId);
           if (tailorJobId && chat && jobs) {
             answerJobs.idle().then(() => {
-              const answers = answerJobs.get(jobId)?.result?.answers;
+              // No answers (or a failed answer job) still joins the asked questions:
+              // those are the ones the user takes to chat.
+              const answers = answerJobs.get(jobId)?.result?.answers ?? [];
               const tj = jobs.get(tailorJobId);
-              // Failed answer job, or a tailor job that's unknown/failed: nothing to merge.
-              if (!answers?.length || !tj || tj.status === "error") return;
+              // A tailor job that's unknown/failed: no run to join.
+              if (!tj || tj.status === "error") return;
               const h = { questions: valid.fields, answers };
               const runId = runOf(tailorJobId);
               if (runId) merge(runId, h);

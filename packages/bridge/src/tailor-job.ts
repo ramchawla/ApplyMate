@@ -111,6 +111,7 @@ export function makeTailorJob(opts: {
       masterTex,
       resumeTex: out.tex,
       resumePdf: out.pdf,
+      coverLetterPdf: out.coverLetterPdf,
       coverLetter: out.coverLetter,
       jd: req.job.description,
     });

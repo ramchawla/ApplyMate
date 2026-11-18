@@ -17,15 +17,15 @@ describe("pollUntil", () => {
     lens = [];
   });
 
-  it("keeps polling through failed checks and gives up after 3 minutes", async () => {
+  it("keeps polling through failed checks and gives up just past the 120 s stream timeout", async () => {
     vi.useFakeTimers();
     const check = vi.fn(async () => {
       throw new Error("bridge down");
     });
     const r = pollUntil(check, () => true);
-    await vi.advanceTimersByTimeAsync(180_000);
+    await vi.advanceTimersByTimeAsync(130_000);
     expect(await r).toBe("timeout");
-    expect(check).toHaveBeenCalledTimes(90);
+    expect(check).toHaveBeenCalledTimes(65);
   });
 
   it("stops when the run is no longer current", async () => {
