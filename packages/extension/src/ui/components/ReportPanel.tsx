@@ -87,8 +87,10 @@ function Keywords({ view, onAsk }: { view: RunView; onAsk: (text: string) => voi
 
 function Change({ c, onAsk }: { c: RunView["changes"][number]; onAsk: (text: string) => void }) {
   const [all, setAll] = useState(false);
+  // Reverted: what tailoring tried, struck back to master. Reordered skills: plain text.
+  const from = c.reverted ? (c.attempted ?? c.before) : c.reordered ? c.after : c.before;
   // ponytail: length heuristic for "Show all"; measure overflow if it misfires.
-  const long = c.after.length + c.before.length > 480;
+  const long = c.after.length + from.length > 480;
   return (
     <div className="group relative px-4 py-3 border-b border-border last:border-b-0">
       <div className="flex items-center gap-2 mb-1.5 pr-12">
@@ -98,16 +100,21 @@ function Change({ c, onAsk }: { c: RunView["changes"][number]; onAsk: (text: str
             c.reverted ? "bg-warn-bg text-warn" : "bg-surface-2 text-text-2"
           }`}
         >
-          {c.reverted ? "Reverted" : "Rewritten"}
+          {c.reverted ? "Reverted" : c.reordered ? "Reordered" : "Rewritten"}
         </span>
       </div>
-      <div className={`text-text-2 leading-[1.6] [&_b]:text-text [&_b]:font-semibold ${long && !all ? "line-clamp-4" : ""}`}>
-        <Diff before={c.before} after={c.after} />
-      </div>
+      {c.after && (
+        <div className={`text-text-2 leading-[1.6] [&_b]:text-text [&_b]:font-semibold ${long && !all ? "line-clamp-4" : ""}`}>
+          <Diff before={from} after={c.after} />
+        </div>
+      )}
       {long && (
         <button type="button" onClick={() => setAll(!all)} className="mt-1 text-small text-accent-text">
           {all ? "Show less" : "Show all"}
         </button>
+      )}
+      {c.reordered && (
+        <div className={c.after ? "mt-1.5 text-small text-text-3" : "text-text-2"}>{c.reordered}</div>
       )}
       {c.reverted && (
         <div className="mt-1.5 text-small text-text-3">

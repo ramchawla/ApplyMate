@@ -95,6 +95,7 @@ describe("buildRunView", () => {
       before: master["r0.b1"],
       after: master["r0.b1"],
       reverted: "reverted to keep the resume on one page",
+      attempted: "Cut CI time by 40\\% fast.",
     });
     // Chat undo put the tailoring edit back to master: no change left to show.
     const undone = buildRunView(report(), state({ edits: { "r0.b0": master["r0.b0"] } }), master);
@@ -116,7 +117,68 @@ describe("buildRunView", () => {
   });
 });
 
+describe("buildRunView: reorders, order, warnings", () => {
+  const m = { summary: "S.", "r0.b0": "A.", "r0.b1": "B.", "r0.b2": "C.", "skills.tech": "Go, Redis, AWS" };
+  const labels = { summary: "Summary", "r0.b0": "Acme Corp · bullet 1", "skills.tech": "Skills · Technologies" };
+  const r = (over: Partial<RunFile> = {}) => report({ labels, edits: [], ...over });
+
+  it("a bullet reorder is a change labelled by role", () => {
+    const v = buildRunView(r(), state({ edits: {}, order: { r0: ["r0.b2", "r0.b0", "r0.b1"] } }), m);
+    expect(v.changes).toEqual([
+      { id: "r0", label: "Acme Corp · bullet order", before: "", after: "", reordered: "Bullet 3 moved to the front." },
+    ]);
+    const mixed = buildRunView(r(), state({ edits: {}, order: { r0: ["r0.b1", "r0.b2", "r0.b0"] } }), m);
+    expect(mixed.changes[0].reordered).toBe("New order: bullets 2, 3, 1.");
+    expect(buildRunView(r(), state({ edits: {}, order: { r0: ["r0.b0", "r0.b1", "r0.b2"] } }), m).changes).toEqual([]);
+  });
+
+  it("a skills line with the same items is Reordered, not a diff", () => {
+    const v = buildRunView(r(), state({ edits: { "skills.tech": "Redis, AWS, Go" } }), m);
+    expect(v.changes[0]).toMatchObject({ label: "Skills · Technologies", reordered: "Nothing added or removed." });
+    const added = buildRunView(r(), state({ edits: { "skills.tech": "Redis, AWS, Go, Rust" } }), m);
+    expect(added.changes[0].reordered).toBeUndefined();
+  });
+
+  it("changes follow document order", () => {
+    const v = buildRunView(
+      r({ edits: [{ id: "skills.tech", before: m["skills.tech"], after: "Go, Redis, GCP" }] }),
+      state({ edits: { "skills.tech": "Go, Redis, GCP", "r0.b1": "B2.", summary: "S2." }, order: { r0: ["r0.b1", "r0.b0", "r0.b2"] } }),
+      m,
+    );
+    expect(v.changes.map((c) => c.id)).toEqual(["summary", "r0", "r0.b1", "skills.tech"]);
+  });
+
+  it("every embedded id in a warning becomes a label", () => {
+    const v = buildRunView(
+      r({
+        warnings: [
+          "Ignored an edit for unknown id r9.b9",
+          "Ignored a reorder for unknown role r3",
+          "Ignored a reorder for r0: not a permutation of its bullets",
+          "r7.b1: dropped metric 40%",
+          "skills.tech: dropped Go",
+        ],
+      }),
+      state(),
+      m,
+    );
+    expect(v.warnings).toEqual([
+      "Ignored an edit for unknown id a resume part",
+      "Ignored a reorder for unknown role a role",
+      "Ignored a reorder for Acme Corp: not a permutation of its bullets",
+      "A resume part: dropped metric 40%",
+      "Skills · Technologies: dropped Go",
+    ]);
+  });
+});
+
 describe("latexToMarked", () => {
+  it("never leaks a backslash", () => {
+    expect(latexToMarked("trailing\\")).toBe("trailing");
+    expect(latexToMarked("1\\,000 users")).toBe("1 000 users");
+    expect(latexToMarked("$\\sim$10k req/s")).toBe("~10k req/s");
+    expect(latexToMarked("e.g.\\ foo, \\LaTeX{} and \\@ \\!x")).toBe("e.g. foo, LaTeX and x");
+  });
   it("bold becomes ** markers, other commands keep their text", () => {
     expect(latexToMarked("Built \\textbf{Rust} and \\textit{Go} \\emph{fast}")).toBe("Built **Rust** and Go fast");
   });
