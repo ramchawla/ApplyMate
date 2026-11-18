@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ApplyMate side panel</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  /* mockup canvas */
+  .canvas { padding: 32px 32px 64px; }
+  .canvas-head { display: flex; align-items: baseline; gap: 16px; max-width: 1240px; margin: 0 auto 28px; }
+  .canvas-head h1 { font-size: var(--t-h2); font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .canvas-head p { margin: 0; color: var(--text-2); font-size: var(--t-small); flex: 1; }
+  .frames { display: flex; flex-wrap: wrap; gap: 40px 32px; justify-content: center; }
+  figure { margin: 0; }
+  figcaption { margin-top: 12px; font-size: var(--t-small); color: var(--text-2); max-width: 380px; }
+  figcaption b { color: var(--text); font-weight: 600; }
+
+  /* the panel */
+  .panel {
+    width: 380px; height: 780px; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--shadow-2);
+  }
+  .top { flex: none; border-bottom: 1px solid var(--border); }
+  .job { display: flex; gap: 12px; padding: 14px 16px 10px; }
+  .job-text { flex: 1; min-width: 0; }
+  .job-title { font-size: var(--t-title); font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; text-wrap: balance; }
+  .job-co { color: var(--text-2); font-size: var(--t-small); margin-top: 2px; }
+  .job-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .bridge { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-meta); color: var(--text-3); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent); }
+  .dot.off { background: var(--err); box-shadow: 0 0 0 3px color-mix(in srgb, var(--err) 18%, transparent); }
+  .pills { display: flex; gap: 4px; }
+  .pill { font-size: var(--t-meta); font-weight: 500; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
+  .pill.accent { color: var(--accent-text); background: var(--accent-soft); border-color: transparent; }
+
+  /* coverage strip: one tick per JD keyword */
+  .cov { padding: 0 16px 12px; }
+  .cov-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+  .cov-label { font-size: var(--t-small); color: var(--text-2); }
+  .cov-label b { color: var(--text); font-weight: 600; font-size: var(--t-body); }
+  .cov-legend { display: flex; gap: 10px; font-size: var(--t-meta); color: var(--text-3); }
+  .cov-legend span::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 4px; background: var(--c); vertical-align: 0; }
+  .strip { display: flex; gap: 2px; height: 8px; }
+  .strip i { flex: 1; border-radius: 2px; background: var(--c); transition: transform 150ms ease-out; cursor: pointer; }
+  .strip i:hover { transform: scaleY(1.6); }
+
+  .tabs { display: flex; gap: 2px; padding: 0 10px; overflow-x: auto; scrollbar-width: none; }
+  .tab {
+    display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 8px; border: 0; background: none;
+    color: var(--text-2); font-size: var(--t-small); font-weight: 500; border-bottom: 2px solid transparent; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+  .tab .n { font-size: var(--t-meta); color: var(--text-3); font-weight: 500; }
+  .tab .n.warn { color: var(--warn); }
+  .tab-body { max-height: 268px; overflow-y: auto; border-top: 1px solid var(--border); background: var(--surface); }
+  .tab-body[hidden] { display: none; }
+
+  /* report lists */
+  .group { padding: 10px 16px 4px; font-size: var(--t-meta); font-weight: 600; color: var(--text-3); display: flex; justify-content: space-between; }
+  .row { position: relative; display: flex; gap: 10px; padding: 7px 16px; align-items: flex-start; }
+  .row:hover { background: var(--surface-2); }
+  .row .mark { margin-top: 3px; }
+  .row-main { flex: 1; min-width: 0; }
+  .row-title { font-weight: 500; }
+  .row-sub { color: var(--text-3); font-size: var(--t-small); }
+  .ask {
+    position: absolute; right: 12px; top: 6px; opacity: 0; height: 24px; padding: 0 8px; font-size: var(--t-meta);
+    border: 1px solid var(--border-strong); background: var(--surface); border-radius: var(--r-ctl); color: var(--text-2);
+    transition: opacity 120ms ease-out;
+  }
+  .row:hover .ask, .row:focus-within .ask { opacity: 1; }
+  .mark.injected { color: var(--accent); } .mark.present { color: var(--kw-present); } .mark.skipped { color: var(--text-3); }
+  .loc { color: var(--text-2); }
+
+  .change { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .change:last-child { border-bottom: 0; }
+  .change-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .change-head .row-title { flex: 1; }
+  .kind { font-size: var(--t-meta); font-weight: 500; padding: 2px 8px; border-radius: var(--r-chip); background: var(--surface-2); color: var(--text-2); }
+  .kind.reverted { background: var(--warn-bg); color: var(--warn); }
+  .diff { color: var(--text-2); line-height: 1.6; }
+  .diff b { color: var(--text); font-weight: 600; }
+  .clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  .more { margin-top: 4px; font-size: var(--t-small); color: var(--accent-text); background: none; border: 0; padding: 0; }
+  .note { margin-top: 6px; font-size: var(--t-small); color: var(--text-3); }
+
+  .letter { padding: 14px 16px; color: var(--text-2); white-space: pre-line; line-height: 1.6; }
+  .letter-status { display: flex; align-items: center; gap: 6px; padding: 10px 16px; font-size: var(--t-small); color: var(--text-2); border-bottom: 1px solid var(--border); }
+
+  .answer { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .answer:last-child { border-bottom: 0; }
+  .q { font-size: var(--t-small); color: var(--text-3); margin-bottom: 3px; }
+  .a { color: var(--text); }
+  .a.blank { color: var(--text-3); font-style: italic; }
+  .src { display: inline-block; margin-top: 6px; font-size: var(--t-meta); color: var(--text-3); }
+
+  .warning { display: flex; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .warning .icon { color: var(--warn); margin-top: 3px; }
+  .warning:last-child { border-bottom: 0; }
+
+  /* chat */
+  .thread { flex: 1; overflow-y: auto; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 14px; }
+  .msg-user {
+    align-self: flex-end; max-width: 86%; background: var(--surface-2); border: 1px solid var(--border);
+    padding: 8px 12px; border-radius: 10px 10px 3px 10px;
+  }
+  .msg-claude { color: var(--text); }
+  .who { font-size: var(--t-meta); font-weight: 600; color: var(--text-3); margin-bottom: 3px; display: flex; align-items: center; gap: 6px; }
+  .caret { display: inline-block; width: 7px; height: 15px; background: var(--accent); vertical-align: -2px; margin-left: 1px; border-radius: 1px; animation: blink 1s steps(2, jump-none) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .thinking { display: inline-flex; gap: 3px; }
+  .thinking i { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); animation: pulse 1.2s ease-in-out infinite; }
+  .thinking i:nth-child(2) { animation-delay: .15s; } .thinking i:nth-child(3) { animation-delay: .3s; }
+  @keyframes pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+  .card { border: 1px solid var(--border-strong); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-1); overflow: hidden; }
+  .card-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .card-head .target { flex: 1; font-size: var(--t-small); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .state { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-meta); font-weight: 500; }
+  .state.ok { color: var(--ok); } .state.err { color: var(--err); } .state.wait { color: var(--text-3); }
+  .card-body { padding: 10px 12px; }
+  .why { font-size: var(--t-small); color: var(--text-3); margin-top: 8px; }
+  .flag { display: flex; gap: 8px; align-items: flex-start; margin: 10px 12px 0; padding: 8px 10px; border-radius: var(--r-ctl); font-size: var(--t-small); }
+  .flag .icon { margin-top: 2px; }
+  .flag.warn { background: var(--warn-bg); color: var(--warn); }
+  .flag.err { background: var(--err-bg); color: var(--err); }
+  .flag.info { background: var(--accent-soft); color: var(--accent-text); }
+  .flag p { margin: 0; color: var(--text); } .flag p b { font-weight: 600; }
+  .card-foot { display: flex; align-items: center; gap: 6px; padding: 10px 12px; }
+  .card-foot .spacer { flex: 1; }
+  .card-foot .done-note { font-size: var(--t-small); color: var(--text-2); flex: 1; }
+  .card.applied { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+  .card.refused .card-body { opacity: .72; }
+  .skeleton { height: 10px; border-radius: 4px; background: linear-gradient(90deg, var(--surface-2), var(--border), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; margin: 6px 0; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  .suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+  .suggest button { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: var(--t-small); color: var(--text-2); }
+  .suggest button:hover { border-color: var(--border-strong); color: var(--text); }
+
+  .composer { flex: none; padding: 10px 12px 12px; border-top: 1px solid var(--border); }
+  .field { display: flex; align-items: flex-end; gap: 8px; border: 1px solid var(--border-strong); border-radius: var(--r-card); padding: 8px 8px 8px 12px; background: var(--surface); }
+  .field:focus-within { box-shadow: var(--focus); border-color: var(--accent); }
+  .field textarea { flex: 1; border: 0; outline: 0; resize: none; background: transparent; color: var(--text); font: inherit; min-height: 22px; max-height: 120px; padding: 2px 0; }
+  .field textarea::placeholder { color: var(--text-3); }
+  .send { width: 28px; height: 28px; border-radius: var(--r-ctl); border: 0; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; }
+  .send.stop { background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); }
+  .hint { display: flex; justify-content: space-between; margin-top: 6px; font-size: var(--t-meta); color: var(--text-3); }
+  .hint span { display: inline-flex; align-items: center; gap: 4px; }
+
+  /* empty state */
+  .empty { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 28px; }
+  .empty h2 { font-size: var(--t-title); font-weight: 600; margin: 14px 0 6px; letter-spacing: -0.01em; }
+  .empty p { margin: 0 0 18px; color: var(--text-2); }
+  .empty h2 { display: flex; align-items: center; gap: 8px; }
+  .empty h2 .icon { width: 18px; height: 18px; color: var(--accent); }
+
+  .steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; color: var(--text-2); }
+  .steps li { display: flex; gap: 10px; }
+  .steps li span { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border-strong); display: grid; place-items: center; font-size: var(--t-meta); color: var(--text-3); }
+  .settings { flex: none; border-top: 1px solid var(--border); }
+  .settings summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px; font-size: var(--t-small); color: var(--text-2); cursor: pointer; }
+  .settings summary::-webkit-details-marker { display: none; }
+  .settings summary .spacer { flex: 1; }
+  .settings .inner { padding: 0 16px 14px; display: grid; gap: 10px; }
+  .settings label { font-size: var(--t-small); color: var(--text-2); display: grid; gap: 4px; }
+  .settings textarea { width: 100%; min-height: 64px; resize: vertical; border: 1px solid var(--border-strong); border-radius: var(--r-ctl); background: var(--surface); color: var(--text); font: inherit; font-size: var(--t-small); padding: 6px 8px; }
+  .theme-toggle { margin-left: auto; }
+</style>
+</head>
+<body>
+<!--
+THESIS: The panel is a review desk, not a chatbot: evidence on top, conversation below, every change a card you approve. Refuses the support-widget bubble stream and the IDE diff wall.
+OWN-WORLD: Quiet neutral surfaces, one cobalt accent for action and "worked in", green/red only for word diffs and outcomes, system UI sans at 13.5px, 4px grid, 10px cards, hairline borders, no monospace.
+STORY: You see what the job asked for and what ApplyMate did, ask about any item, and apply only the changes you like before pressing Submit yourself.
+FIRST VIEWPORT: Job title and bridge dot top-left/right; keyword coverage strip under it; tabs; chat thread fills the rest; composer pinned at the bottom.
+FORM: Linear/Raycast-style tool UI (user-pinned reference; concept roll skipped). Seed key: pinned.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M16 13H8M16 17H8"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></symbol>
+  <symbol id="i-reattach" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-sort" viewBox="0 0 24 24"><path d="m21 16-4 4-4-4M17 20V4M3 8l4-4 4 4M7 4v16"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-enter" viewBox="0 0 24 24"><path d="M20 4v7a4 4 0 0 1-4 4H4"/><path d="m9 10-5 5 5 5"/></symbol>
+</svg>
+
+<div class="canvas">
+  <div class="canvas-head">
+    <h1>Side panel: review &amp; chat</h1>
+    <p>380px Chrome side panel. Data: the 2026-11-13 Clearer.io run, plus some made-up keywords and chat turns so every state shows. Tabs are clickable, and clicking the active tab collapses the report.</p>
+    <button class="btn theme-toggle" id="theme">Toggle dark</button>
+  </div>
+
+  <div class="frames">
+
+    <!-- 1. no run -->
+    <figure>
+      <div class="panel">
+        <div class="empty">
+          <h2><svg class="icon"><use href="#i-zap"/></svg>Nothing tailored on this tab yet</h2>
+          <p>Press ⚡ on the application page. When the resume is ready, its review and a chat with Claude show up here.</p>
+          <ol class="steps">
+            <li><span>1</span>Open the job's application form</li>
+            <li><span>2</span>Press ⚡ in the ApplyMate widget</li>
+            <li><span>3</span>Review what changed, ask for fixes, then submit on the site</li>
+          </ol>
+        </div>
+        <details class="settings" open>
+          <summary><svg class="icon"><use href="#i-sliders"/></svg>Job description and bridge<span class="spacer"></span><span class="bridge"><span class="dot"></span>Bridge connected</span></summary>
+          <div class="inner">
+            <label>Paste the job description if the page doesn't show it
+              <textarea placeholder="Paste the full posting here"></textarea>
+            </label>
+          </div>
+        </details>
+      </div>
+      <figcaption><b>No run yet.</b> Teaches the one action and keeps the paste-JD box and bridge status in a small settings section.</figcaption>
+    </figure>
+
+    <!-- 2. report: keywords -->
+    <figure>
+      <div class="panel" data-report="keywords">
+        <div class="top" data-slot="top"></div>
+        <div class="thread">
+          <div class="msg-claude">
+            <div class="who">Claude</div>
+            Tailored for Clearer.io. I worked in 3 keywords, reordered your skills toward the AI side, and flagged 2 phrases you should be ready to talk about. Ask about anything, or tell me what to change.
+          </div>
+          <div class="suggest">
+            <button>Why did you skip team leadership?</button>
+            <button>Make the summary punchier</button>
+            <button>Check my form answers</button>
+          </div>
+        </div>
+        <div data-slot="composer"></div>
+      </div>
+      <figcaption><b>Report: keywords.</b> Each tick in the strip is one keyword from the job description. Hovering a row shows Ask, which fills in the message box.</figcaption>
+    </figure>
+
+    <!-- 3. report: changes -->
+    <figure>
+      <div class="panel" data-report="changes">
+        <div class="top" data-slot="top"></div>
+        <div class="thread">
+          <div class="msg-user">Why did the skills line change?</div>
+        </div>
+        <div data-slot="composer"></div>
+      </div>
+      <figcaption><b>Report: changes.</b> Word-level diffs in normal text, with bold kept and no LaTeX. A reverted edit says why it was undone.</figcaption>
+    </figure>
+
+    <!-- 4. report: answers -->
+    <figure>
+      <div class="panel" data-report="answers">
+        <div class="top" data-slot="top"></div>
+        <div class="thread"></div>
+        <div data-slot="composer"></div>
+      </div>
+      <figcaption><b>Report: answers.</b> Each drafted answer shows where it came from. A blank answer says why it's blank and who fills it. The Letter and Warnings tabs are clickable here.</figcaption>
+    </figure>
+
+    <!-- 5. streaming -->
+    <figure>
+      <div class="panel" data-report="collapsed">
+        <div class="top" data-slot="top"></div>
+        <div class="thread">
+          <div class="msg-user">Why did you skip team leadership?</div>
+          <div class="msg-claude">
+            <div class="who">Claude</div>
+            <span id="stream"></span><span class="caret"></span>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="field">
+            <textarea rows="1" placeholder="Claude is replying…" disabled></textarea>
+            <button class="send stop" aria-label="Stop reply"><svg class="icon"><use href="#i-stop"/></svg></button>
+          </div>
+          <div class="hint"><span><kbd>Esc</kbd> stop</span><span>First words in a few seconds</span></div>
+        </div>
+      </div>
+      <figcaption><b>Streaming reply.</b> The report collapses to its tabs, so the conversation gets the room. Text streams in as Claude writes it, and the button becomes Stop.</figcaption>
+    </figure>
+
+    <!-- 6. proposal: applied + pending -->
+    <figure>
+      <div class="panel" data-report="collapsed" data-version="v2">
+        <div class="top" data-slot="top"></div>
+        <div class="thread">
+          <div class="msg-user">The summary ends weakly with "Also built LLM pipelines." Fix that.</div>
+          <div class="msg-claude">
+            <div class="who">Claude</div>
+            Agreed, it reads like an afterthought. I moved the LLM work into the opening list and cut the targeting line, since the job title already says what you're after.
+          </div>
+          <div class="card applied">
+            <div class="card-head"><span class="target">Summary</span><span class="state ok"><svg class="icon sm"><use href="#i-check"/></svg>Applied</span></div>
+            <div class="card-body diff">…specializing in <b>agentic AI systems</b> (<b>MCP</b>)<ins> and <b>LLM pipelines</b></ins>, <b>distributed systems</b>, <b>CI/CD orchestration</b>, and <b>platform engineering</b> across <b>15+ microservices</b>.<del> Also built LLM pipelines. Targeting Staff AI/Platform roles.</del></div>
+            <div class="card-foot"><span class="done-note">Version 2 attached to the form</span><button class="btn ghost"><svg class="icon"><use href="#i-undo"/></svg>Undo</button></div>
+          </div>
+          <div class="msg-user">Lead the RBC MCP bullet with the 60% number.</div>
+          <div class="msg-claude">
+            <div class="who">Claude</div>
+            Good call, the number is the strongest thing in it. This version leads with it and keeps every claim from the original.
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="target">RBC, Senior Software Engineer · bullet 1</span><span class="state wait">Not applied</span></div>
+            <div class="card-body diff"><ins>Cut mean time to pipeline diagnosis by an estimated <b>60%</b> by architecting</ins><del>Architected</del> an authenticated <b>MCP server</b> exposing <b>GitHub Actions</b> telemetry through a unified <b>agentic AI tool surface</b> with <b>OAuth-secured</b> sessions and <b>Redis</b>-backed state<del>, reducing mean time to pipeline diagnosis by an estimated 60%</del>.
+              <div class="why">Leads with the outcome and keeps the length the same.</div>
+            </div>
+            <div class="card-foot"><button class="btn primary"><svg class="icon"><use href="#i-check"/></svg>Apply</button><button class="btn ghost">Dismiss</button><span class="spacer"></span><span class="hint"><span><kbd>⌘</kbd><kbd>↵</kbd> apply</span></span></div>
+          </div>
+        </div>
+        <div data-slot="composer"></div>
+      </div>
+      <figcaption><b>Proposals: applied and pending.</b> Nothing changes until you click Apply. Once a card is applied, the resume is rebuilt and attached again, and the card offers Undo.</figcaption>
+    </figure>
+
+    <!-- 7. refused, warning, earlier step -->
+    <figure>
+      <div class="panel" data-report="collapsed" data-version="v3">
+        <div class="top" data-slot="top"></div>
+        <div class="thread">
+          <div class="msg-user">Add more about evals to the ApplyMate project bullet.</div>
+          <div class="card refused">
+            <div class="card-head"><span class="target">ApplyMate project · bullet 1</span><span class="state err"><svg class="icon sm"><use href="#i-x"/></svg>Doesn't fit</span></div>
+            <div class="card-body diff">…rewriting with anchor-validated invariant checks<ins>, an <b>evaluation harness</b> that replays saved job descriptions against every prompt change, and regression gates on keyword coverage</ins>, LaTeX assembly…</div>
+            <div class="flag err"><svg class="icon"><use href="#i-warn"/></svg><p><b>2 lines too long.</b> Your resume would go over one page, so nothing was changed.</p></div>
+            <div class="card-foot"><button class="btn">Ask for shorter</button><button class="btn ghost">Dismiss</button></div>
+          </div>
+          <div class="msg-user">Ask for a shorter version.</div>
+          <div class="card">
+            <div class="card-head"><span class="target">ApplyMate project · bullet 1</span><span class="state wait">Not applied</span></div>
+            <div class="card-body diff">…<b>Claude API</b> rewriting with invariant checks<ins> and an <b>evaluation harness</b></ins>, LaTeX assembly, and cover letter generation.</div>
+            <div class="flag warn"><svg class="icon"><use href="#i-warn"/></svg><p>"evaluation harness" isn't in your corpus or master resume. Make sure you can speak to it.</p></div>
+            <div class="card-foot"><button class="btn primary"><svg class="icon"><use href="#i-check"/></svg>Apply</button><button class="btn ghost">Dismiss</button></div>
+          </div>
+          <div class="msg-user">The OTE answer is blank. Put 180–200k CAD.</div>
+          <div class="card applied">
+            <div class="card-head"><span class="target">Answer · Expected on-target earnings</span><span class="state ok"><svg class="icon sm"><use href="#i-check"/></svg>Applied</span></div>
+            <div class="card-body diff"><ins>$180,000–200,000 CAD</ins></div>
+            <div class="flag info"><svg class="icon"><use href="#i-back"/></svg><p>That question is on an earlier step. Go back to it and the new answer fills in.</p></div>
+            <div class="card-foot"><span class="spacer"></span><button class="btn ghost"><svg class="icon"><use href="#i-undo"/></svg>Undo</button></div>
+          </div>
+        </div>
+        <div data-slot="composer"></div>
+      </div>
+      <figcaption><b>Refused, warning, earlier step.</b> A change that breaks one page is refused with the reason and a one-click retry. Warnings let you decide. A change for a step you've already left tells you where it'll appear.</figcaption>
+    </figure>
+
+  </div>
+</div>
+
+<!-- shared report pieces, cloned into each panel -->
+<template id="t-top">
+  <div class="job">
+    <div class="job-text">
+      <div class="job-title">Staff AI Engineer, Agentic Systems</div>
+      <div class="job-co">Clearer.io, Toronto</div>
+    </div>
+    <div class="job-meta">
+      <span class="bridge"><span class="dot"></span>Bridge</span>
+      <span class="pills"><span class="pill accent" data-ver>v1</span><span class="pill">1 page</span></span>
+    </div>
+  </div>
+  <div class="cov">
+    <div class="cov-row">
+      <span class="cov-label"><b>14 of 17</b> job keywords on your resume</span>
+      <span class="cov-legend"><span style="--c:var(--kw-injected)">Worked in</span><span style="--c:var(--kw-present)">Already there</span><span style="--c:var(--kw-skipped)">Skipped</span></span>
+    </div>
+    <div class="strip" data-strip></div>
+  </div>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="keywords">Keywords <span class="n">17</span></button>
+    <button class="tab" role="tab" data-tab="changes">Changes <span class="n">3</span></button>
+    <button class="tab" role="tab" data-tab="letter">Letter</button>
+    <button class="tab" role="tab" data-tab="answers">Answers <span class="n">3</span></button>
+    <button class="tab" role="tab" data-tab="warnings">Warnings <span class="n warn">2</span></button>
+  </div>
+  <div class="tab-body" data-body></div>
+</template>
+
+<template id="t-keywords">
+  <div class="group"><span>Worked in</span><span>3</span></div>
+  <div class="row"><svg class="icon mark injected"><use href="#i-plus"/></svg><div class="row-main"><div class="row-title">agentic AI systems</div><div class="row-sub">in <span class="loc">Summary</span></div></div><button class="ask">Ask</button></div>
+  <div class="row"><svg class="icon mark injected"><use href="#i-plus"/></svg><div class="row-main"><div class="row-title">LLM pipelines</div><div class="row-sub">in <span class="loc">Summary</span></div></div><button class="ask">Ask</button></div>
+  <div class="row"><svg class="icon mark injected"><use href="#i-plus"/></svg><div class="row-main"><div class="row-title">tool use</div><div class="row-sub">in <span class="loc">RBC, Senior Software Engineer · bullet 1</span></div></div><button class="ask">Ask</button></div>
+  <div class="group"><span>Skipped</span><span>3</span></div>
+  <div class="row"><svg class="icon mark skipped"><use href="#i-circle"/></svg><div class="row-main"><div class="row-title">Staff-level team leadership</div><div class="row-sub">No direct reports in your corpus</div></div><button class="ask">Ask</button></div>
+  <div class="row"><svg class="icon mark skipped"><use href="#i-circle"/></svg><div class="row-main"><div class="row-title">Rust</div><div class="row-sub">No experience in your corpus</div></div><button class="ask">Ask</button></div>
+  <div class="row"><svg class="icon mark skipped"><use href="#i-circle"/></svg><div class="row-main"><div class="row-title">fine-tuning</div><div class="row-sub">Only prompt-level work in your corpus</div></div><button class="ask">Ask</button></div>
+  <div class="group"><span>Already on your resume</span><span>11</span></div>
+  <div class="row"><svg class="icon mark present"><use href="#i-dot"/></svg><div class="row-main"><div class="row-title">MCP</div><div class="row-sub">in <span class="loc">RBC, Senior Software Engineer · bullet 1</span></div></div><button class="ask">Ask</button></div>
+  <div class="row"><svg class="icon mark present"><use href="#i-dot"/></svg><div class="row-main"><div class="row-title">distributed systems</div><div class="row-sub">in <span class="loc">Summary</span></div></div><button class="ask">Ask</button></div>
+  <div class="row"><svg class="icon mark present"><use href="#i-dot"/></svg><div class="row-main"><div class="row-title">Python</div><div class="row-sub">in <span class="loc">Skills · Languages</span></div></div><button class="ask">Ask</button></div>
+  <div class="row"><svg class="icon mark present"><use href="#i-dot"/></svg><div class="row-main"><div class="row-title">GitHub Actions</div><div class="row-sub">in <span class="loc">Skills · Technologies</span> and 3 bullets</div></div><button class="ask">Ask</button></div>
+</template>
+
+<template id="t-changes">
+  <div class="change">
+    <div class="change-head"><span class="row-title">Summary</span><span class="kind">Rewritten</span></div>
+    <div class="diff clamp">Senior Software Engineer with 3+ years building enterprise developer platforms at RBC (T&amp;O), specializing in <ins><b>agentic AI systems</b> (<b>MCP</b>), </ins><b>distributed systems</b>, <b>CI/CD orchestration</b>, <del><b>agentic AI tooling</b> (MCP), </del>and <b>platform engineering</b> across <b>15+ microservices</b>. <del>Deep experience in <b>observability</b>, <b>progressive delivery</b>, and <b>developer experience</b>.</del> <ins>Also built LLM pipelines.</ins> Targeting <del>Senior/Staff SWE and Platform/AI Engineer</del><ins>Staff AI/Platform</ins> roles.</div>
+    <button class="more">Show all</button>
+  </div>
+  <div class="change">
+    <div class="change-head"><span class="row-title">Skills · Technologies</span><span class="kind">Reordered</span></div>
+    <div class="diff"><ins>GitHub Actions, Redis, OAuth 2.0, GraphQL</ins> moved to the front. Nothing added or removed.</div>
+  </div>
+  <div class="change">
+    <div class="change-head"><span class="row-title">Reno Tahoe Rental Car, Head of Engineering · bullet 2</span><span class="kind reverted">Reverted</span></div>
+    <div class="diff">…webhook-driven atomic booking state transitions<del> and an event-sourced <b>observability</b> pipeline</del>…</div>
+    <div class="note">Undone automatically: it pushed the resume past one page.</div>
+  </div>
+</template>
+
+<template id="t-letter">
+  <div class="letter-status"><svg class="icon"><use href="#i-file"/></svg>Fills the cover-letter box on the page. No PDF needed for this form.</div>
+  <div class="letter">Dear Hiring Team,
+
+I am applying for the Staff AI Engineer, Agentic Systems role. At RBC I architected an authenticated MCP server that exposes GitHub Actions telemetry, runner diagnostics and documentation through one AI tool surface. It uses OAuth-secured sessions, Redis-backed state and streamable HTTP, and it cut mean time to pipeline diagnosis by an estimated 60%.
+
+Outside work I built ApplyMate, an AI job application agent with a 5-stage LLM pipeline…</div>
+</template>
+
+<template id="t-answers">
+  <div class="answer"><div class="q">Do you have the right to work in the country where this role is based?</div><div class="a">I am authorized to work in Canada and based in Toronto. I would be glad to confirm my specific status during the process.</div><span class="src">Drafted by Claude from your profile</span></div>
+  <div class="answer"><div class="q">Are you currently based in Toronto, Canada?</div><div class="a">Yes</div><span class="src">From your profile</span></div>
+  <div class="answer"><div class="q">Expected on-target earnings (OTE)</div><div class="a blank">Left blank. Your profile has no salary figure, so fill this in yourself or tell Claude a number.</div></div>
+</template>
+
+<template id="t-warnings">
+  <div class="warning"><svg class="icon"><use href="#i-warn"/></svg><div class="row-main"><div>"agentic AI systems" isn't in your corpus or master resume. It was reframed from your MCP work, so make sure you can speak to it.</div><div class="row-sub">in <span class="loc">Summary</span></div></div></div>
+  <div class="warning"><svg class="icon"><use href="#i-warn"/></svg><div class="row-main"><div>"LLM pipelines" isn't in your corpus or master resume. It was reframed, so make sure you can speak to it.</div><div class="row-sub">in <span class="loc">Summary</span></div></div></div>
+</template>
+
+<template id="t-composer">
+  <div class="composer">
+    <div class="field">
+      <textarea rows="1" placeholder="Ask about this application or suggest a change"></textarea>
+      <button class="send" aria-label="Send"><svg class="icon"><use href="#i-up"/></svg></button>
+    </div>
+    <div class="hint"><span><kbd>↵</kbd> send <kbd>⇧</kbd><kbd>↵</kbd> new line</span><span>Changes only apply when you click Apply</span></div>
+  </div>
+</template>
+
+<script>
+  const kw = [...Array(3).fill("--kw-injected"), ...Array(11).fill("--kw-present"), ...Array(3).fill("--kw-skipped")];
+  const tpl = (id) => document.getElementById(id).content.cloneNode(true);
+
+  function show(panel, tab) {
+    const body = panel.querySelector("[data-body]");
+    panel.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", t.dataset.tab === tab));
+    body.hidden = !tab;
+    body.replaceChildren(...(tab ? [tpl("t-" + tab)] : []));
+    panel.dataset.open = tab || "";
+  }
+
+  document.querySelectorAll(".panel[data-report]").forEach((panel) => {
+    panel.querySelector('[data-slot="top"]').replaceWith(Object.assign(document.createElement("div"), { className: "top" }));
+    const top = panel.querySelector(".top");
+    top.append(tpl("t-top"));
+    if (panel.dataset.version) top.querySelector("[data-ver]").textContent = panel.dataset.version;
+    top.querySelector("[data-strip]").append(...kw.map((c) => Object.assign(document.createElement("i"), { style: `--c:var(${c})` })));
+    const slot = panel.querySelector('[data-slot="composer"]');
+    if (slot) slot.replaceWith(tpl("t-composer"));
+    top.querySelectorAll(".tab").forEach((t) =>
+      t.addEventListener("click", () => show(panel, panel.dataset.open === t.dataset.tab ? "" : t.dataset.tab)));
+    show(panel, panel.dataset.report === "collapsed" ? "" : panel.dataset.report);
+  });
+
+  // the one authored motion: the reply streams in
+  const reply = "Your corpus has no direct reports, so claiming Staff-level team leadership would be the first thing an interviewer probes. What you do have is cross-team reach: the control plane is used by 10+ platform teams, and the CI/CD architecture runs across 15+ services. I can frame that as technical leadership in the summary if you'd like.";
+  const out = document.getElementById("stream");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) out.textContent = reply.slice(0, 190);
+  else {
+    let i = 0;
+    (function tick() {
+      i = i >= reply.length + 40 ? 0 : i + 3;
+      out.textContent = reply.slice(0, i);
+      setTimeout(tick, i === 0 ? 900 : 45);
+    })();
+  }
+
+  document.getElementById("theme").addEventListener("click", () => {
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+  });
+</script>
+</body>
+</html>

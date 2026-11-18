@@ -1,0 +1,124 @@
+/* ApplyMate review & chat: one token set for the side panel and the dashboard.
+   Light is the default; dark follows the OS unless data-theme pins one. */
+
+:root {
+  color-scheme: light;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* type scale: 1.125 steps, fixed rem (product UI) */
+  --t-meta: 12px;
+  --t-small: 12.75px;
+  --t-body: 13.5px;
+  --t-title: 15px;
+  --t-h2: 18px;
+  --t-h1: 22px;
+  --lh: 1.5;
+
+  /* 4px grid */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+  --r-chip: 4px; --r-ctl: 6px; --r-card: 10px;
+
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #f1f2f5;
+  --border: #e3e5ea;
+  --border-strong: #cfd3da;
+  --text: #16181d;
+  --text-2: #4c515b;
+  --text-3: #686e7b;
+
+  --accent: #3657d6;
+  --accent-hover: #2b49bf;
+  --accent-fg: #ffffff;
+  --accent-soft: #eaeefc;
+  --accent-text: #2a47b5;
+
+  --add-bg: #ddf3e4;
+  --add-text: #135c36;
+  --del-bg: #fbe4e4;
+  --del-text: #9e2328;
+
+  --ok: #1d8348;
+  --ok-bg: #e4f5ea;
+  --warn: #9a5b00;
+  --warn-bg: #fff2d6;
+  --err: #b8282d;
+  --err-bg: #fdeaea;
+
+  /* keyword coverage: already on resume / worked in / skipped */
+  --kw-present: #8a94b8;
+  --kw-injected: var(--accent);
+  --kw-skipped: var(--border-strong);
+
+  --focus: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent);
+  --shadow-1: 0 1px 2px rgb(16 18 24 / 0.06), 0 1px 1px rgb(16 18 24 / 0.04);
+  --shadow-2: 0 6px 20px -6px rgb(16 18 24 / 0.18), 0 2px 6px -2px rgb(16 18 24 / 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #131418; --surface: #1a1c21; --surface-2: #202228;
+    --border: #2b2e35; --border-strong: #3a3e47;
+    --text: #eceef1; --text-2: #aeb2bb; --text-3: #8d929c;
+    --accent: #7089ff; --accent-hover: #8a9eff; --accent-fg: #0d1233;
+    --accent-soft: #222a4a; --accent-text: #a3b3ff;
+    --add-bg: #15362a; --add-text: #86dba8; --del-bg: #3d1d20; --del-text: #ff9e9e;
+    --ok: #52c784; --ok-bg: #16301f; --warn: #f0b443; --warn-bg: #362a12; --err: #ff6f6f; --err-bg: #3a1c1e;
+    --kw-present: #6b7499; --kw-skipped: #3a3e47;
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 8px 24px -8px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #131418; --surface: #1a1c21; --surface-2: #202228;
+  --border: #2b2e35; --border-strong: #3a3e47;
+  --text: #eceef1; --text-2: #aeb2bb; --text-3: #8d929c;
+  --accent: #7089ff; --accent-hover: #8a9eff; --accent-fg: #0d1233;
+  --accent-soft: #222a4a; --accent-text: #a3b3ff;
+  --add-bg: #15362a; --add-text: #86dba8; --del-bg: #3d1d20; --del-text: #ff9e9e;
+  --ok: #52c784; --ok-bg: #16301f; --warn: #f0b443; --warn-bg: #362a12; --err: #ff6f6f; --err-bg: #3a1c1e;
+  --kw-present: #6b7499; --kw-skipped: #3a3e47;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 8px 24px -8px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+}
+
+/* shared base */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-font-smoothing: antialiased; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 400 var(--t-body)/var(--lh) var(--font);
+  font-variant-numeric: tabular-nums;
+}
+::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+:focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--r-ctl); }
+button { font: inherit; color: inherit; cursor: pointer; }
+.icon { width: 14px; height: 14px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.icon.sm { width: 12px; height: 12px; }
+
+/* buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-ctl);
+  background: var(--surface); color: var(--text); font-size: var(--t-small); font-weight: 500;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out;
+}
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--text-2); }
+.btn.ghost:hover { background: var(--surface-2); color: var(--text); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+kbd {
+  font: 500 11px/1 var(--font); color: var(--text-3); padding: 2px 4px;
+  border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--surface);
+}
+
+/* word diff (proportional, never monospace) */
+del, ins { text-decoration: none; border-radius: 3px; padding: 0 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+del { background: var(--del-bg); color: var(--del-text); text-decoration: line-through; text-decoration-thickness: 1px; }
+ins { background: var(--add-bg); color: var(--add-text); }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

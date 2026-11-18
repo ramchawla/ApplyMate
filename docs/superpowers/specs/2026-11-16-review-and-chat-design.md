@@ -317,6 +317,58 @@ states: pending / applied / refused-too-long / warning) and the dashboard
 detail page, shown to the user in the browser. Build starts after they
 pick/adjust. Bridge and data work (§1–3) can proceed before the gate.
 
+**Approved 2026-11-18** (user: "both of the htmls look great"). Mockups:
+`docs/superpowers/mockups/review-chat/{panel,dashboard}.html`. Tokens are
+in `tokens.css` next to them, which is the source for both Tailwind configs.
+
+- Reference feel: Linear / Raycast (user's pick). Avoid IDE density: no
+  monospace, no LaTeX in the UI, and diffs show rendered text with bold kept.
+- Font: system UI sans stack. Scale (px): meta 12, small 12.75, body 13.5,
+  title 15, h2 18, h1 22. Line height 1.5.
+- Spacing on a 4px grid (4/8/12/16/24/32). Radius: chip 4, control 6, card 10.
+- Color is restrained: neutrals (`bg`, `surface`, `surface-2`, `border`,
+  `border-strong`, `text`, `text-2`, `text-3`) plus one cobalt `accent`
+  (light `#3657d6`, dark `#7089ff`). The accent appears only on primary
+  actions, the current version and "worked in" keywords.
+- Diff colors: `add-bg/add-text`, `del-bg/del-text`.
+- Status colors: `ok`, `warn`, `err`, each with an `-bg` variant.
+- Keyword colors: `kw-present`, `kw-injected` (= accent), `kw-skipped`.
+- Light and dark both follow the OS, and `data-theme` pins one.
+- Panel layout:
+  - The top zone holds the job title and company, a bridge dot, a version
+    pill and a page-count pill. Below that is the **coverage strip**, one
+    tick per JD keyword colored by state, then tabs: Keywords, Changes,
+    Letter, Answers, Warnings.
+  - The tab body is capped at about 268px and scrolls. Clicking the active
+    tab collapses it, and a chat turn or reply collapses the report.
+  - Keywords are grouped as Worked in, Skipped, then Already on your
+    resume. Each row shows a hover/focus **Ask** button, which prefills the
+    composer.
+  - Changes show word diffs. Reverted edits say why they were undone.
+  - Answers show their source, and a blank answer says why it is blank.
+- Chat:
+  - User turns are subtle right-aligned blocks. Claude turns are plain
+    text under a small "Claude" label, with no avatars.
+  - While streaming there is a caret, the composer is disabled and Send
+    becomes Stop (Esc).
+  - Proposal card: the header shows the location label and its state (Not
+    applied / Applied / Doesn't fit). The body is a word diff and a why
+    line. Flags are warn, err (refused + "Ask for shorter") and info
+    (earlier step). The footer holds Apply (⌘↵) and Dismiss, or Undo once
+    applied.
+- Composer: Enter sends, Shift+Enter adds a newline. Hint: "Changes only
+  apply when you click Apply".
+- Dashboard detail:
+  - Header: title, company, status pill, date, submitted version, Job
+    posting and Resume PDF.
+  - Under the header, the coverage strip and legend.
+  - Main column: keywords in 3 columns, then the changes from the master as
+    submitted, then the cover letter and answers side by side, then
+    warnings.
+  - Aside (380px): versions (newest first, current highlighted, one PDF per
+    version), runs, and the read-only chat transcript with each proposal's
+    final state.
+
 ## 6. Already shipped (this session)
 
 Resume/folder naming: `TAILOR_SCHEMA` gained `job {title, company}`;
