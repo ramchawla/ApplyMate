@@ -1,0 +1,408 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-18T06:58:52.069206+00:00",
+  "title": "Design System: ApplyMate",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Cobalt",
+        "dark": "#7089ff",
+        "tonalRamp": [
+          "oklch(15% 0.093 267)",
+          "oklch(26% 0.12 267)",
+          "oklch(37% 0.146 267)",
+          "oklch(48% 0.173 267)",
+          "oklch(60% 0.178 267)",
+          "oklch(72% 0.149 267)",
+          "oklch(84% 0.12 267)",
+          "oklch(95% 0.093 267)"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Cobalt Deep",
+        "dark": "#8a9eff"
+      },
+      "accent-fg": {
+        "role": "primary",
+        "displayName": "On Cobalt",
+        "dark": "#0d1233"
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Cobalt Wash",
+        "dark": "#222a4a"
+      },
+      "accent-text": {
+        "role": "primary",
+        "displayName": "Cobalt Ink",
+        "dark": "#a3b3ff"
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Desk Grey",
+        "dark": "#131418"
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "dark": "#1a1c21"
+      },
+      "surface-2": {
+        "role": "neutral",
+        "displayName": "Fog",
+        "dark": "#202228"
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "dark": "#2b2e35"
+      },
+      "border-strong": {
+        "role": "neutral",
+        "displayName": "Firm Hairline",
+        "dark": "#3a3e47"
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "dark": "#eceef1",
+        "tonalRamp": [
+          "oklch(15% 0.006 265)",
+          "oklch(26% 0.008 265)",
+          "oklch(37% 0.009 265)",
+          "oklch(48% 0.011 265)",
+          "oklch(60% 0.011 265)",
+          "oklch(72% 0.009 265)",
+          "oklch(84% 0.008 265)",
+          "oklch(95% 0.006 265)"
+        ]
+      },
+      "text-2": {
+        "role": "neutral",
+        "displayName": "Slate",
+        "dark": "#aeb2bb"
+      },
+      "text-3": {
+        "role": "neutral",
+        "displayName": "Pewter",
+        "dark": "#8d929c"
+      },
+      "add-bg": {
+        "role": "status",
+        "displayName": "Added Wash",
+        "dark": "#15362a"
+      },
+      "add-text": {
+        "role": "status",
+        "displayName": "Added Ink",
+        "dark": "#86dba8"
+      },
+      "del-bg": {
+        "role": "status",
+        "displayName": "Removed Wash",
+        "dark": "#3d1d20"
+      },
+      "del-text": {
+        "role": "status",
+        "displayName": "Removed Ink",
+        "dark": "#ff9e9e"
+      },
+      "ok": {
+        "role": "status",
+        "displayName": "Ok",
+        "dark": "#52c784",
+        "tonalRamp": [
+          "oklch(15% 0.064 152)",
+          "oklch(26% 0.082 152)",
+          "oklch(37% 0.1 152)",
+          "oklch(48% 0.118 152)",
+          "oklch(60% 0.122 152)",
+          "oklch(72% 0.102 152)",
+          "oklch(84% 0.082 152)",
+          "oklch(95% 0.064 152)"
+        ]
+      },
+      "ok-bg": {
+        "role": "status",
+        "displayName": "Ok Wash",
+        "dark": "#16301f"
+      },
+      "warn": {
+        "role": "status",
+        "displayName": "Warn",
+        "dark": "#f0b443",
+        "tonalRamp": [
+          "oklch(15% 0.069 70)",
+          "oklch(26% 0.088 70)",
+          "oklch(37% 0.108 70)",
+          "oklch(48% 0.128 70)",
+          "oklch(60% 0.131 70)",
+          "oklch(72% 0.11 70)",
+          "oklch(84% 0.088 70)",
+          "oklch(95% 0.069 70)"
+        ]
+      },
+      "warn-bg": {
+        "role": "status",
+        "displayName": "Warn Wash",
+        "dark": "#362a12"
+      },
+      "err": {
+        "role": "status",
+        "displayName": "Err",
+        "dark": "#ff6f6f",
+        "tonalRamp": [
+          "oklch(15% 0.083 25)",
+          "oklch(26% 0.107 25)",
+          "oklch(37% 0.131 25)",
+          "oklch(48% 0.155 25)",
+          "oklch(60% 0.159 25)",
+          "oklch(72% 0.133 25)",
+          "oklch(84% 0.107 25)",
+          "oklch(95% 0.083 25)"
+        ]
+      },
+      "err-bg": {
+        "role": "status",
+        "displayName": "Err Wash",
+        "dark": "#3a1c1e"
+      },
+      "kw-present": {
+        "role": "keyword",
+        "displayName": "Already There",
+        "dark": "#6b7499",
+        "tonalRamp": [
+          "oklch(15% 0.025 275)",
+          "oklch(26% 0.032 275)",
+          "oklch(37% 0.039 275)",
+          "oklch(48% 0.046 275)",
+          "oklch(60% 0.047 275)",
+          "oklch(72% 0.039 275)",
+          "oklch(84% 0.032 275)",
+          "oklch(95% 0.025 275)"
+        ]
+      },
+      "kw-injected": {
+        "role": "keyword",
+        "displayName": "Worked In (= accent)",
+        "dark": "#7089ff"
+      },
+      "kw-skipped": {
+        "role": "keyword",
+        "displayName": "Skipped (= border-strong)",
+        "dark": "#3a3e47"
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Dashboard application title only."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Panel job title, dashboard section headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default UI and reading text; prose at 1.6-1.65 line height."
+      },
+      "small": {
+        "displayName": "Small",
+        "purpose": "Controls, tabs, nav, meta, flags, card headers."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Pills, speaker label, card state, kbd, legends."
+      },
+      "unused-h2": {
+        "displayName": "H2 (18px)",
+        "purpose": "Defined in the preset (--t-h2) but not used by any built component."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-1",
+        "value": "0 1px 2px rgb(16 18 24 / 0.06), 0 1px 1px rgb(16 18 24 / 0.04)",
+        "dark": "0 1px 2px rgb(0 0 0 / 0.4)",
+        "purpose": "Proposal cards only."
+      },
+      {
+        "name": "shadow-2",
+        "value": "0 6px 20px -6px rgb(16 18 24 / 0.18), 0 2px 6px -2px rgb(16 18 24 / 0.08)",
+        "dark": "0 8px 24px -8px rgb(0 0 0 / 0.6), 0 2px 6px -2px rgb(0 0 0 / 0.4)",
+        "purpose": "In the token set; no built component uses it."
+      },
+      {
+        "name": "focus",
+        "value": "0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent)",
+        "purpose": "Global :focus-visible ring, control radius."
+      }
+    ],
+    "motion": [
+      {
+        "name": "hover-color",
+        "value": "150ms",
+        "purpose": "Button background/color transitions."
+      },
+      {
+        "name": "tick-grow",
+        "value": "transform 150ms ease-out, scaleY(1.6)",
+        "purpose": "Coverage strip tick hover."
+      },
+      {
+        "name": "shimmer",
+        "value": "1.4s linear infinite",
+        "purpose": "Skeleton loading bars."
+      },
+      {
+        "name": "caret-blink",
+        "value": "1s steps(2, jump-none) infinite",
+        "purpose": "Streaming caret."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce disables all animation and transitions",
+        "purpose": "Accessibility floor."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "dashboard-two-column",
+        "value": "1000px"
+      }
+    ],
+    "theming": "Light default; dark via prefers-color-scheme unless data-theme=\"light\"; data-theme=\"dark\" forces dark. Source: lib/ui/tailwind-preset.cjs."
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Apply, Send, Resume PDF. One per decision.",
+      "html": "<button class=\"ds-btn ds-btn-primary\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg>Apply</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;font:500 12.75px/1.5 var(--font);border-radius:6px;border:1px solid;cursor:pointer;transition:background-color 150ms,color 150ms}.ds-btn:focus-visible{outline:none;box-shadow:var(--focus)}.ds-btn:disabled{opacity:.5;cursor:not-allowed}.ds-btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}.ds-btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}"
+    },
+    {
+      "name": "Plain Button",
+      "kind": "button",
+      "refersTo": "button-plain",
+      "description": "Secondary actions: Job posting, Ask for shorter.",
+      "html": "<button class=\"ds-btn ds-btn-plain\">Ask for shorter</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;font:500 12.75px/1.5 var(--font);border-radius:6px;border:1px solid;cursor:pointer;transition:background-color 150ms,color 150ms}.ds-btn:focus-visible{outline:none;box-shadow:var(--focus)}.ds-btn:disabled{opacity:.5;cursor:not-allowed}.ds-btn-plain{background:var(--surface);border-color:var(--border-strong);color:var(--text)}.ds-btn-plain:hover{background:var(--surface-2)}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Dismiss, Undo.",
+      "html": "<button class=\"ds-btn ds-btn-ghost\">Dismiss</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;font:500 12.75px/1.5 var(--font);border-radius:6px;border:1px solid;cursor:pointer;transition:background-color 150ms,color 150ms}.ds-btn:focus-visible{outline:none;box-shadow:var(--focus)}.ds-btn:disabled{opacity:.5;cursor:not-allowed}.ds-btn-ghost{background:transparent;border-color:transparent;color:var(--text-2)}.ds-btn-ghost:hover{background:var(--surface-2);color:var(--text)}"
+    },
+    {
+      "name": "Pills",
+      "kind": "chip",
+      "refersTo": "pill-accent",
+      "description": "Current version (accent) and page count (neutral).",
+      "html": "<span class=\"ds-pill ds-pill-accent\">v3</span> <span class=\"ds-pill\">1 page</span>",
+      "css": ".ds-pill{display:inline-block;font:500 12px/1.5 var(--font);color:var(--text-2);background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:1px 8px}.ds-pill-accent{color:var(--accent-text);background:var(--accent-soft);border-color:transparent}"
+    },
+    {
+      "name": "Proposal Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Signature unit of change: header state, word diff, why line, Apply/Dismiss.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-head\"><span>Summary</span><em>Not applied</em></div><div class=\"ds-card-body\">Built <del>internal tools</del> <ins>event-driven data pipelines</ins> serving 2M users<div class=\"ds-why\">Matches the JD's streaming focus.</div></div><div class=\"ds-card-foot\"><button class=\"ds-btn ds-btn-primary\">Apply</button><button class=\"ds-btn ds-btn-ghost\">Dismiss</button></div></div>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;font:500 12.75px/1.5 var(--font);border-radius:6px;border:1px solid;cursor:pointer;transition:background-color 150ms,color 150ms}.ds-btn:focus-visible{outline:none;box-shadow:var(--focus)}.ds-btn:disabled{opacity:.5;cursor:not-allowed}.ds-btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}.ds-btn-ghost{background:transparent;border-color:transparent;color:var(--text-2)}.ds-card{font:400 13.5px/1.5 var(--font);color:var(--text);background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;box-shadow:var(--shadow-1);overflow:hidden;max-width:360px}.ds-card-head{display:flex;gap:8px;padding:9px 12px;background:var(--surface-2);border-bottom:1px solid var(--border);font-size:12.75px;font-weight:600}.ds-card-head span{flex:1}.ds-card-head em{font-style:normal;font-size:12px;font-weight:500;color:var(--text-3)}.ds-card-body{padding:10px 12px;color:var(--text-2);line-height:1.6}.ds-card-body del{background:var(--del-bg);color:var(--del-text);border-radius:3px;padding:0 2px}.ds-card-body ins{background:var(--add-bg);color:var(--add-text);text-decoration:none;border-radius:3px;padding:0 2px}.ds-why{margin-top:8px;font-size:12.75px;color:var(--text-3)}.ds-card-foot{display:flex;gap:6px;padding:10px 12px}"
+    },
+    {
+      "name": "Composer",
+      "kind": "input",
+      "refersTo": "composer",
+      "description": "Pinned chat input; cobalt border and ring on focus.",
+      "html": "<div class=\"ds-composer\"><textarea rows=\"1\" placeholder=\"Ask about this application or suggest a change\"></textarea><button aria-label=\"Send\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m5 12 7-7 7 7\"/><path d=\"M12 19V5\"/></svg></button></div>",
+      "css": ".ds-composer{display:flex;align-items:flex-end;gap:8px;padding:8px 8px 8px 12px;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;max-width:360px}.ds-composer:focus-within{border-color:var(--accent);box-shadow:var(--focus)}.ds-composer textarea{flex:1;resize:none;border:0;outline:none;background:transparent;color:var(--text);font:400 13.5px/1.5 var(--font);padding:2px 0}.ds-composer textarea::placeholder{color:var(--text-3)}.ds-composer button{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:6px;background:var(--accent);color:var(--accent-fg);cursor:pointer}.ds-composer button:hover{background:var(--accent-hover)}"
+    },
+    {
+      "name": "Coverage Strip",
+      "kind": "custom",
+      "refersTo": "kw-injected",
+      "description": "One tick per JD keyword, colored by state.",
+      "html": "<div class=\"ds-strip\"><i style=\"background:var(--kw-injected)\"></i><i style=\"background:var(--kw-injected)\"></i><i style=\"background:var(--kw-present)\"></i><i style=\"background:var(--kw-skipped)\"></i><i style=\"background:var(--kw-injected)\"></i><i style=\"background:var(--kw-present)\"></i><i style=\"background:var(--kw-present)\"></i><i style=\"background:var(--kw-skipped)\"></i><i style=\"background:var(--kw-injected)\"></i><i style=\"background:var(--kw-present)\"></i></div>",
+      "css": ".ds-strip{display:flex;gap:2px;height:8px;max-width:340px}.ds-strip i{flex:1;border-radius:2px;transition:transform 150ms ease-out}.ds-strip i:hover{transform:scaleY(1.6)}"
+    },
+    {
+      "name": "Dashboard Nav",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Sticky 48px bar, Fog fill on hover and current.",
+      "html": "<nav class=\"ds-nav\"><b>ApplyMate</b><a href=\"#\" aria-current=\"page\">Applications</a><a href=\"#\">JD archive</a><a href=\"#\">Analytics</a></nav>",
+      "css": ".ds-nav{display:flex;align-items:center;gap:4px;height:48px;padding:0 24px;background:var(--surface);border-bottom:1px solid var(--border);font-family:var(--font)}.ds-nav b{margin-right:20px;font-weight:600;letter-spacing:-0.01em;color:var(--text)}.ds-nav a{padding:6px 10px;border-radius:6px;font-size:12.75px;font-weight:500;color:var(--text-2);text-decoration:none}.ds-nav a:hover,.ds-nav a[aria-current]{background:var(--surface-2);color:var(--text)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Review Desk",
+    "overview": "ApplyMate's two surfaces, the Chrome side panel and the localhost dashboard, are one quiet tool UI in the Linear/Raycast family. The panel is a review desk, not a chatbot. Evidence sits on top, conversation sits below, and every change arrives as a card the user approves. The dashboard's application page is the record of one run: what the job asked for, what was sent, and how it got there. Both surfaces share one token set (`lib/ui/tailwind-preset.cjs`, mirrored from the approved `docs/superpowers/mockups/review-chat/tokens.css`).\n\nDensity is calm. Body text is 13.5px system sans on a 4px grid, separated by hairline borders and tonal steps rather than heavy chrome. Color is held back: neutrals carry the structure, a single cobalt accent marks action and \"worked in\", and green and red appear only in word diffs and outcomes. The user rejected two failure modes. One is the support-widget bubble stream. The other is the IDE diff wall: too dense, monospace, raw LaTeX. Diffs render as proportional prose with bold kept.\n\nLight and dark both follow the OS through `prefers-color-scheme`, and `data-theme=\"light|dark\"` on the root pins one. Tokens are CSS custom properties, so components never use `dark:` variants.",
+    "keyCharacteristics": [
+      "System UI sans at 13.5px, with tabular numerals on the body. No monospace anywhere, including `<kbd>`.",
+      "One cobalt accent. Everything else is neutral, plus status and diff hues.",
+      "Hairline 1px borders and tonal surfaces (`surface` / `surface-2`). Almost no shadow.",
+      "Three radii: chip 4, control 6, card 10, plus fully rounded pills.",
+      "Every change is a card with explicit Apply / Dismiss / Undo. Nothing changes silently."
+    ],
+    "rules": [
+      {
+        "name": "The One Cobalt Rule",
+        "body": "The accent marks only primary actions, the current version, and worked-in keywords. When the accent appears on decoration or as a second emphasis, the hierarchy collapses.",
+        "section": "colors"
+      },
+      {
+        "name": "The Green-Means-Outcome Rule",
+        "body": "Green and red appear only in word diffs and in outcomes (applied, refused, error, bridge state). They never act as decoration or category color.",
+        "section": "colors"
+      },
+      {
+        "name": "The No-Mono Rule",
+        "body": "No monospace in the UI. Word diffs are proportional prose, `<kbd>` keys use the sans face, and LaTeX or raw part IDs never reach the screen.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sentence-Case Rule",
+        "body": "Every label, heading and button is in sentence case at normal tracking. The system has no uppercase tracked labels.",
+        "section": "typography"
+      },
+      {
+        "name": "The Evidence-First Rule",
+        "body": "On both surfaces, the evidence (what the job asked for and what was done) comes before conversation or history. The coverage strip always sits directly under the title.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat-Desk Rule",
+        "body": "Surfaces rest flat. Only the thing waiting on the user's decision, the proposal card, gets lift.",
+        "section": "elevation"
+      },
+      {
+        "name": "The No-Nesting Rule",
+        "body": "No cards inside cards. Dashboard sections are single hairline boxes with internal row dividers.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** take every color, size, radius and shadow from the shared preset (`lib/ui/tailwind-preset.cjs`) through its custom properties, so light and dark stay in lockstep.",
+      "**Do** keep the accent to primary actions, the current version, and worked-in keywords (The One Cobalt Rule).",
+      "**Do** render every resume, letter or answer change as a proposal card with explicit Apply, and keep Undo reachable after applying.",
+      "**Do** show diffs as proportional prose with `<ins>`/`<del>` tints and bold preserved.",
+      "**Do** use Small (12.75px) for controls and meta, and Body (13.5px) for reading.",
+      "**Do** give every interactive element the global `:focus-visible` ring, and honor `prefers-reduced-motion` (all animation and transitions off)."
+    ],
+    "donts": [
+      "**Don't** use monospace, LaTeX, or raw part IDs (`r1.b2`) anywhere in the UI.",
+      "**Don't** build chat as a bubble stream with avatars. Claude's turns are plain text under a label.",
+      "**Don't** nest cards in cards, or lay out the dashboard as stat tiles.",
+      "**Don't** use green or red outside diffs and outcomes, or introduce a second accent hue.",
+      "**Don't** use stock Tailwind palette classes (`gray-*`, `blue-*`) or `font-bold` headings. Those belong to pre-restyle dashboard pages and are not part of this system.",
+      "**Don't** add uppercase tracked labels or eyebrow text above headings."
+    ]
+  }
+}
