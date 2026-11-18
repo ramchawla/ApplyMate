@@ -13,6 +13,7 @@ import {
   handlePageSync,
   isLoneCheckbox,
   isPageSyncMsg,
+  PARSER_SETTLE_MS,
   pickResumeField,
   stateAnswer,
   toQuestion,
@@ -319,7 +320,7 @@ async function runSteps(ctx: OneClickContext, touched: Set<string>): Promise<Run
       if (result && (resumeField || coverField)) {
         // Resume parsers (Lever, Ashby, Workday) overwrite fields on upload —
         // let them finish, then re-apply the profile values.
-        await sleep(ctx.settleMs ?? 1500);
+        await sleep(ctx.settleMs ?? PARSER_SETTLE_MS);
         await applyFill(plan.instructions, doc, (id) => touched.has(id));
       }
     }
@@ -622,11 +623,11 @@ async function main(): Promise<void> {
   );
 
   // Chat changes from the side panel (sent to every frame). Only the frame
-  // that applied it answers; silence from all frames means not-found.
+  // that has the field answers; silence from all frames means not-found.
   chrome.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
     if (!isPageSyncMsg(msg)) return false;
     handlePageSync(document, msg, { send, touched }).then(
-      (r) => r === "ok" && sendResponse(r),
+      (r) => r !== "not-found" && sendResponse(r),
       (err: unknown) => console.error("[ApplyMate] page sync failed:", err),
     );
     return true;

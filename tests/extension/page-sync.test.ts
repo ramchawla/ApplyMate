@@ -45,10 +45,42 @@ describe("page sync", () => {
     const { d, attached } = page(`<label for="first">First Name</label><input id="first">
       <label for="resume">Resume *</label><input id="resume" type="file">`);
     const { sent, send } = bridge();
-    const res = await handlePageSync(d, { type: "REATTACH_RESUME", runId: "run-ps", fileName: "Jane_Dev_Acme.pdf", version: 2 }, { send, touched: new Set() });
+    const res = await handlePageSync(d, { type: "REATTACH_RESUME", runId: "run-ps", fileName: "Jane_Dev_Acme.pdf", version: 2 }, { send, touched: new Set(), settleMs: 1 });
     expect(res).toBe("ok");
     expect(attached.resume).toEqual(["Jane_Dev_Acme.pdf"]);
-    expect(sent).toEqual([{ type: "FETCH_RUN_PDF", runId: "run-ps", kind: "resume" }]);
+    expect(sent).toEqual([{ type: "FETCH_RUN_PDF", runId: "run-ps", kind: "resume" }, { type: "GET_PROFILE" }]);
+  });
+
+  it("REATTACH_RESUME re-applies the profile after the resume parser overwrites fields", async () => {
+    stubDataTransfer();
+    const { d } = page(`<label for="email">Email</label><input id="email" value="j@x.com">
+      <label for="phone">Phone</label><input id="phone" value="my own">
+      <label for="resume">Resume</label><input id="resume" type="file">
+      <button id="next">Next</button>`);
+    let pressed = 0;
+    d.getElementById("next")!.addEventListener("click", () => pressed++);
+    // The site's parser rewrites the form when a resume lands.
+    d.getElementById("resume")!.addEventListener("change", () => {
+      (d.getElementById("email") as HTMLInputElement).value = "parsed@resume.com";
+      (d.getElementById("phone") as HTMLInputElement).value = "555-parsed";
+    });
+    const send = async (msg: any) =>
+      msg.type === "FETCH_RUN_PDF" ? { base64: btoa("%PDF") } : msg.type === "GET_PROFILE" ? { email: "j@x.com", phone: "555-0100" } : {};
+    const touched = new Set(["phone"]); // the user's own edit stays theirs
+    const res = await handlePageSync(d, { type: "REATTACH_RESUME", runId: "run-rp", fileName: "R.pdf", version: 1 }, { send, touched, settleMs: 1 });
+    expect(res).toBe("ok");
+    expect((d.getElementById("email") as HTMLInputElement).value).toBe("j@x.com");
+    expect((d.getElementById("phone") as HTMLInputElement).value).toBe("555-parsed");
+    expect(pressed).toBe(0);
+  });
+
+  it("REATTACH_RESUME reports a bridge failure fetching the PDF, not not-found", async () => {
+    stubDataTransfer();
+    const { d, attached } = page(`<label for="resume">Resume</label><input id="resume" type="file">`);
+    const send = async (msg: any) => (msg.type === "FETCH_RUN_PDF" ? { error: "Failed to fetch" } : {});
+    const res = await handlePageSync(d, { type: "REATTACH_RESUME", runId: "r", fileName: "R.pdf", version: 1 }, { send, touched: new Set() });
+    expect(res).toBe("no-bridge");
+    expect(attached.resume).toEqual([]);
   });
 
   it("REATTACH_RESUME is not-found when the step has no resume input", async () => {
