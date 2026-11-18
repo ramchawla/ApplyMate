@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { KeywordStatus, RunView } from "../../../../../lib/shared/run-view";
 import { Diff } from "./Diff";
 import { Icon } from "./Icon";
@@ -130,12 +130,18 @@ export function ReportPanel({
   view,
   letterPdf,
   onAsk,
+  collapse = 0,
 }: {
   view: RunView;
   letterPdf: boolean;
   onAsk: (text: string) => void;
+  // Bumped by the parent (a chat turn starts) to fold the report down to its tabs.
+  collapse?: number;
 }) {
   const [tab, setTab] = useState<Tab | "">("keywords");
+  useEffect(() => {
+    if (collapse) setTab("");
+  }, [collapse]);
   const { covered, total } = view.coverage;
   const tabs: [Tab, string, number | null][] = [
     ["keywords", "Keywords", view.keywords.length],

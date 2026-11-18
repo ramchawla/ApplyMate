@@ -20,6 +20,8 @@
   del { @apply bg-del-bg text-del-text; text-decoration: line-through; text-decoration-thickness: 1px; }
   ins { @apply bg-add-bg text-add-text; text-decoration: none; }
 
+  kbd { @apply inline-grid place-items-center min-w-4 h-4 px-1 font-sans text-meta text-text-2 bg-surface-2 border border-border rounded-chip; }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
@@ -33,4 +35,9 @@
     animation: shimmer 1.4s linear infinite;
   }
   @keyframes shimmer { to { background-position: -200% 0; } }
+  .caret {
+    @apply inline-block w-[7px] h-[15px] bg-accent ml-px rounded-[1px] align-[-2px];
+    animation: blink 1s steps(2, jump-none) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
 }

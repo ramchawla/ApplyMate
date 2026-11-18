@@ -4,14 +4,15 @@ import { latexToMarked } from "../../../../../lib/shared/latex-text";
 
 // Word diff of two LaTeX strings as rendered text: <del>/<ins> spans, bold kept.
 // Bold is tracked per side (before = same+del, after = same+add), so a **run**
-// that the diff splits across parts stays bold.
-export function Diff({ before, after }: { before: string; after: string }) {
+// that the diff splits across parts stays bold. `plain`: letters/answers, no LaTeX, no bold.
+export function Diff({ before, after, plain = false }: { before: string; after: string; plain?: boolean }) {
   let boldBefore = false;
   let boldAfter = false;
   const out: ReactNode[] = [];
-  wordDiff(latexToMarked(before), latexToMarked(after)).forEach((p, i) => {
+  const parts = plain ? wordDiff(before, after) : wordDiff(latexToMarked(before), latexToMarked(after));
+  parts.forEach((p, i) => {
     const nodes: ReactNode[] = [];
-    p.text.split("**").forEach((seg, j) => {
+    (plain ? [p.text] : p.text.split("**")).forEach((seg, j) => {
       if (j > 0) {
         if (p.op !== "add") boldBefore = !boldBefore;
         if (p.op !== "del") boldAfter = !boldAfter;

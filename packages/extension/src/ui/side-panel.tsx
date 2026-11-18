@@ -1,16 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/tailwind.css";
 import { BridgeDot, useBridgeUp } from "./components/BridgeStatus";
 import { BridgeTokenField } from "./components/BridgeTokenField";
 import { Icon } from "./components/Icon";
 import { ReportPanel } from "./components/ReportPanel";
+import { ChatThread } from "./components/ChatThread";
+import { COMPOSER_ID, Composer } from "./components/Composer";
+import { useChat } from "./lib/use-chat";
 import { jobKey } from "../lib/jd-cache";
-import { bridgeFetch } from "../utils/bridge";
-import { buildRunView, type RunView } from "../../../../lib/shared/run-view";
+import { buildRunView } from "../../../../lib/shared/run-view";
 import type { RunReport } from "../types";
-
-type Loaded = { view: RunView; letterPdf: boolean } | { error: string } | null;
 
 function useActiveTab() {
   const [tab, setTab] = useState<chrome.tabs.Tab | null>(null);
@@ -26,31 +26,6 @@ function useActiveTab() {
     };
   }, []);
   return tab;
-}
-
-// GET /chat/:runId → the run's review; null while loading.
-function useRun(runId: string | undefined, version: number | undefined): Loaded {
-  const [run, setRun] = useState<Loaded>(null);
-  useEffect(() => {
-    setRun(null);
-    if (!runId) return;
-    let live = true;
-    (async () => {
-      try {
-        const res = await bridgeFetch(`/chat/${encodeURIComponent(runId)}`);
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-        const view = buildRunView(body.report, body.state, body.master ?? {});
-        if (live) setRun({ view, letterPdf: !!body.report.wantCoverLetterPdf });
-      } catch (err) {
-        if (live) setRun({ error: (err as Error).message });
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, [runId, version]);
-  return run;
 }
 
 function Header({ title, company, up, pills }: { title: string; company: string; up: boolean | null; pills?: [string, string] }) {
@@ -147,10 +122,28 @@ function App() {
   const [report, setReport] = useState<RunReport | null>(null);
   const [jd, setJd] = useState("");
   const [saved, setSaved] = useState(false);
-  // ponytail: Ask fills this; Task 13's composer reads it.
+  // The composer's text: Ask buttons fill it, a failed or stopped send restores it.
   const [draft, setDraft] = useState("");
+  const [collapse, setCollapse] = useState(0);
   const key = tab?.url ? jobKey(tab.url) : "";
-  const run = useRun(report?.result?.runId, report?.result?.version);
+  const chat = useChat(report?.result?.runId, report?.result?.version, tab?.id);
+  const run = chat.data;
+  const view = useMemo(
+    () => (run && "report" in run ? buildRunView(run.report, run.state, run.master) : null),
+    [run],
+  );
+
+  function ask(text: string) {
+    setDraft(text);
+    document.getElementById(COMPOSER_ID)?.focus();
+  }
+
+  async function submit(text: string) {
+    if (!text.trim() || chat.streaming) return;
+    setDraft("");
+    setCollapse((n) => n + 1);
+    if (!(await chat.send(text))) setDraft(text);
+  }
 
   useEffect(() => {
     if (tab?.id === undefined) return;
@@ -182,7 +175,6 @@ function App() {
   }
 
   const loading = !!report?.result?.runId && run === null;
-  const view = run && "view" in run ? run : null;
   const failed = run && "error" in run ? run.error : "";
 
   return (
@@ -194,12 +186,17 @@ function App() {
           {view ? (
             <>
               <Header
-                title={view.view.title}
-                company={view.view.company}
+                title={view.title}
+                company={view.company}
                 up={up}
-                pills={[`v${view.view.version + 1}`, `${view.view.pages} page${view.view.pages === 1 ? "" : "s"}`]}
+                pills={[`v${view.version + 1}`, `${view.pages} page${view.pages === 1 ? "" : "s"}`]}
               />
-              <ReportPanel view={view.view} letterPdf={view.letterPdf} onAsk={setDraft} />
+              <ReportPanel
+                view={view}
+                letterPdf={run && "report" in run ? run.report.wantCoverLetterPdf : false}
+                onAsk={ask}
+                collapse={collapse}
+              />
             </>
           ) : (
             <>
@@ -215,8 +212,21 @@ function App() {
         </div>
       )}
 
-      {/* Chat thread + composer (Task 13). */}
-      {report && <div className="flex-1 overflow-y-auto" data-draft={draft} />}
+      {view && run && "report" in run ? (
+        <div className="flex-1 min-h-0 flex flex-col">
+          <ChatThread data={run} view={view} chat={chat} onSend={(t) => void submit(t)} />
+          <Composer
+            value={draft}
+            onChange={setDraft}
+            onSend={() => void submit(draft)}
+            onStop={chat.stop}
+            streaming={!!chat.streaming}
+            error={chat.sendError}
+          />
+        </div>
+      ) : (
+        report && <div className="flex-1" />
+      )}
 
       <details className="flex-none border-t border-border" open={!report}>
         <summary className="flex items-center gap-2 px-4 py-2.5 text-small text-text-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">

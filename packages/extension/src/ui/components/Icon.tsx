@@ -16,6 +16,22 @@ const paths = {
       <path d="M14 2v4a2 2 0 0 0 2 2h4M16 13H8M16 17H8" />
     </>
   ),
+  check: <path d="M20 6 9 17l-5-5" />,
+  x: <path d="M18 6 6 18M6 6l12 12" />,
+  undo: (
+    <>
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+    </>
+  ),
+  up: (
+    <>
+      <path d="m5 12 7-7 7 7" />
+      <path d="M12 19V5" />
+    </>
+  ),
+  stop: <rect x="6" y="6" width="12" height="12" rx="2" />,
+  back: <path d="m12 19-7-7 7-7M19 12H5" />,
   sliders: (
     <>
       <path d="M20 7h-9M14 17H5" />
