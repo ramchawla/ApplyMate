@@ -29,6 +29,9 @@ content script (every frame, classic IIFE)          background SW            bri
   4. attach PDF (DataTransfer), fill Claude answers                              → tectonic compile + page fit
   5. re-apply profile values (resume parsers overwrite)                          → ~/.applymate/applications/<date-co-role>/
   6. user clicks Submit → MARK_APPLIED ───────────────────────────────────────►  + SQLite (dashboard)
+side panel (report + chat) ── GET/POST /chat/:runId (NDJSON) ───────────────────►  claude -p turn → validated proposals
+  Apply/Undo ── POST /chat/:runId/apply ────────────────────────────────────────►  recompile (one page) → state.json v+1
+  page sync (content script): REATTACH_RESUME / REFILL_ANSWER / REFILL_COVER_LETTER
 ```
 
 - **JD sourcing** (`lib/jd-cache.ts`): pasted override → JD on page → JD cached
@@ -50,6 +53,20 @@ content script (every frame, classic IIFE)          background SW            bri
   advance button and wait for the step to change (unchanged → pause with the
   page's errors). Pressing ⚡ again resumes on the current step, reuses the
   tailoring job, and never overwrites fields the user edited.
+- **Run folder** (`lib/local/runs.ts`): each run's dir holds `master.tex`
+  (snapshot), `report.json` (written once, never rewritten), `state.json`
+  (source of truth for current edits/order/cover letter/answers/questions/
+  version) and `chat.json`. `GET /tailor/:id` is overlaid with `state.json`;
+  `POST /answer` takes `tailorJobId` to merge wizard answers into the run.
+- **Review & chat**: widget is slim + "Review & chat →"; the side panel shows
+  the report (`buildRunView`) and a chat whose replies may carry proposals
+  (resume edits, cover letter, answers). Proposals are validated server-side
+  (`proposals.ts`) and applied only on the user's Apply/Undo; each apply
+  recompiles with the page-fit rule, bumps `version`, and the page re-syncs
+  (re-attach PDF, refill answers). One turn at a time per run (409 busy).
+  Dashboard detail shows runs, versions, report, transcript (`getRuns`). Spec:
+  `docs/superpowers/specs/2026-11-16-review-and-chat-design.md`; approved
+  mockups: `docs/superpowers/mockups/review-chat/`.
 - **Claude never answers** lone checkboxes (consent/terms/opt-ins) or fields
   that already hold a value; only answers for asked fields are applied.
 
@@ -83,7 +100,7 @@ After changing extension code: rebuild, then ↻ reload at `chrome://extensions`
 | `generation-directives.md` | Audience profiles (FAANG/startup/enterprise/AI/platform) |
 | `profile.yaml` | Autofill values, `work`/`education`/`skills`/`languages` lists (most recent first), `answers:` regex rules for repeat questions |
 | `bridge-token`, `paired-extension` | Bearer token (persistent) and the TOFU-paired extension origin |
-| `applications/<date>-<co>-<role>/` | `resume.tex/.pdf`, `cover-letter.md`, `report.json`, `jd.md` |
+| `applications/<date>-<co>-<role>/` | `resume.tex/.pdf`, `cover-letter.md`, `jd.md`, `master.tex` (snapshot), `report.json` (immutable), `state.json` (current edits/version), `chat.json` (transcript) |
 | `app.db` | SQLite for the dashboard (applications, versions, JD archive) |
 | `bridge.log` | launchd stdout/stderr |
 
@@ -94,16 +111,23 @@ After changing extension code: rebuild, then ↻ reload at `chrome://extensions`
 | `packages/extension/src/content/content.ts` | Gating (incl. apply dialogs), `runOneClick` wizard loop, submit detection, SPA/field watchers |
 | `packages/extension/src/content/wizard.ts` | `activeScope`, `findStepButton` (submit wins), `stepSignature`, `waitForStepChange`, `visibleErrors` |
 | `packages/extension/src/content/adapters/workday.ts` | Repeating Add sections, date spinbuttons, self-identify date |
-| `packages/extension/src/content/widget.ts` | Shadow-DOM widget (all dynamic text escaped) |
+| `packages/extension/src/content/widget.ts` | Shadow-DOM widget (all dynamic text escaped); slim, coverage + "Review & chat →" |
+| `packages/extension/src/content/page-sync.ts` | Handles `REATTACH_RESUME`/`REFILL_ANSWER`/`REFILL_COVER_LETTER` after a chat apply; skips fields the user edited |
+| `packages/extension/src/ui/` | Side panel: `ReportPanel`, `ChatThread`, `ProposalCard`, `Composer`, `Diff`; `lib/use-chat.ts`, `ndjson.ts`, `page-sync.ts` |
 | `packages/extension/src/content/extractors/form.ts` | Live-DOM fields, label resolution, value-type inference |
 | `packages/extension/src/content/fill.ts` | Fill text/select/radio/checkbox/combobox/radiogroup/dropdown buttons/search prompts, `matchOption`, `readOptions`, file attach |
 | `packages/extension/src/content/dom.ts` | Shadow-DOM-aware queries, native setters, press/type sequences |
 | `packages/extension/src/lib/field-mapping.ts` | Profile → field values, answer rules |
-| `packages/extension/src/background.ts` | Proxies bridge calls (pairing, tailor, poll, PDFs, applied) |
-| `packages/skill/src/tailor/` | `resume-doc` (ID-addressed parts), `prompt`, `claude-cli`, `checks`, `run` (orchestrator), `letter`, `answer` (answers-only) |
-| `packages/bridge/src/server.ts` | Routes: `/pair`, `/tailor`, `/tailor/:id[/resume|cover-letter.pdf]`, `/answer`, `/answer/:id`, `/profile`, `/applications/applied` |
+| `packages/extension/src/background.ts` | Proxies bridge calls (pairing, tailor, poll, PDFs incl. `FETCH_RUN_PDF`, applied), opens the side panel |
+| `packages/skill/src/tailor/` | `resume-doc` (ID-addressed parts), `prompt`, `claude-cli`, `checks`, `run` (orchestrator), `letter`, `answer` (answers-only), `chat` (prompt + reply split), `proposals` (validation), `fit` (page-fit budget) |
+| `packages/bridge/src/server.ts` | Routes: `/pair`, `/tailor`, `/tailor/:id[/resume|cover-letter.pdf]`, `/answer`, `/answer/:id`, `/profile`, `/applications/applied`, `/chat/:runId` (GET; POST streams NDJSON, 409 busy), `/chat/:runId/apply` (`{messageIndex, proposalIndex, undo?}`), `/chat/:runId/resume.pdf`, `/chat/:runId/cover-letter.pdf` |
+| `packages/bridge/src/chat.ts` | Per-run chat: streamed turn, apply/undo + recompile, version rows; run folder is the only state |
 | `packages/bridge/src/profile-sync.ts` | `pnpm profile:sync` (fills only empty profile lists) |
 | `packages/bridge/src/tailor-job.ts` | Reads `~/.applymate`, runs tailoring, saves, names the PDF |
+| `lib/local/runs.ts` | Write/read run folders, `scanRuns`, `runsForApplication` |
+| `lib/shared/run-view.ts`, `word-diff.ts`, `latex-text.ts` | Report view-model, word/marked diff, LaTeX→text; shared by panel + dashboard |
+| `lib/ui/tailwind-preset.cjs` | Design tokens shared by extension UI + dashboard (see `PRODUCT.md`) |
+| `packages/dashboard/lib/data.ts` | `getRuns`: run report/versions/transcript for the application detail page |
 | `lib/local/compile-latex.ts` | tectonic + pdfLaTeX compat shim + page/height probe |
 | `lib/shared/constants.ts` | Field keyword table, autocomplete map, board patterns |
 
@@ -125,6 +149,8 @@ After changing extension code: rebuild, then ↻ reload at `chrome://extensions`
   `vite.content.config.ts`. An ES-module content script silently never runs.
 - Names, contact, companies, titles, dates, education are never exposed to
   Claude for editing (`resume-doc.ts` only exposes summary, bullets, skills).
+- Chat proposals never apply themselves; applied resume changes must keep one
+  page (refused otherwise).
 
 ## History
 
