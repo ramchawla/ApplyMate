@@ -14,7 +14,7 @@ export interface PersistPayload {
   resumeLatex?: string;
   coverLetter?: string;
   parsedJD?: { keywords?: string[] } & Record<string, unknown>;
-  rewritingReport?: { overallConfidence?: number; perBullet?: unknown[] };
+  rewritingReport?: { overallConfidence?: number; perBullet?: unknown[]; runId?: string; version?: number };
   jobDescription?: string;
 }
 

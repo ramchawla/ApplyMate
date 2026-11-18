@@ -187,6 +187,10 @@ export function renderResume(
   return out;
 }
 
+// Every editable part's text by id: the `master` the run review diffs against (bridge chat + dashboard).
+export const partTexts = (tex: string): Record<string, string> =>
+  Object.fromEntries(parseResume(tex).parts.map((p) => [p.id, p.text]));
+
 // Human-readable name per part id, so UI never shows raw ids (r1.b2).
 export function partLabels(doc: ResumeDoc): Record<string, string> {
   const labels: Record<string, string> = {};

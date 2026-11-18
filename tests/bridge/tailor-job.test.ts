@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeTailorJob, resumeFileName } from "../../packages/bridge/src/tailor-job";
 import { readRun } from "../../lib/local/runs";
+import { openDb, migrate, listVersions } from "../../lib/local/db";
 import { parseResume, renderResume } from "../../packages/skill/src/tailor/resume-doc";
 
 const FIXTURE = fileURLToPath(
@@ -64,6 +65,25 @@ describe("makeTailorJob", () => {
     expect(out.result.runId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     expect(out.result.labels["summary"]).toBe("Summary");
     expect(out.result.version).toBe(0);
+  });
+
+  it("tags the tailoring version row with its run as v0 (dashboard groups versions by run)", async () => {
+    const db = openDb(":memory:");
+    migrate(db);
+    const job = makeTailorJob({
+      dir: appDir(),
+      db,
+      compile: async (latex) => ({ pdf: Buffer.from(latex.slice(0, 5)), pages: 1 }),
+      runner: async () => ({}),
+    });
+    const out = await job({
+      job: { title: "SRE", company: "Acme", url: "https://x/1", description: "" },
+      keywords: [],
+      fields: [],
+      wantCoverLetterPdf: false,
+    });
+    const [row] = listVersions(db, out.result.applicationId);
+    expect(row.report).toMatchObject({ runId: out.result.runId, version: 0 });
   });
 
   it("suffixes a same-day rerun of the same job", async () => {

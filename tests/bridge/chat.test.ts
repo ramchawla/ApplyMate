@@ -274,7 +274,7 @@ describe("makeChat.apply", () => {
     expect(chat.pdf(RUN_ID, "resume")!.toString()).toBe(`%PDF-${tex.length}`);
     const versions = listVersions(db, "app_1");
     expect(versions).toHaveLength(1);
-    expect(versions[0].report).toEqual({ runId: RUN_ID, version: 1 });
+    expect(versions[0].report).toEqual({ runId: RUN_ID, version: 1, label: "Summary" });
     expect(versions[0].latex).toBe(tex);
   });
 

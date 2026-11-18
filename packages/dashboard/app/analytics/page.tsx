@@ -20,7 +20,7 @@ export default function AnalyticsPage() {
         <Stat label="Interview rate" value={`${rate}%`} />
       </div>
       <h2 className="text-lg font-medium">By Status</h2>
-      <ul className="bg-white rounded border divide-y">
+      <ul className="bg-surface rounded border divide-y">
         {Object.entries(stats.byStatus).map(([status, n]) => (
           <li key={status} className="p-2 flex justify-between text-sm">
             <span>{status}</span>
@@ -34,9 +34,9 @@ export default function AnalyticsPage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-white rounded border p-3">
+    <div className="bg-surface rounded border p-3">
       <div className="text-2xl font-bold">{value}</div>
-      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-xs text-text-3">{label}</div>
     </div>
   );
 }

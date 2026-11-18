@@ -68,6 +68,7 @@ export function makeTailorJob(opts: {
     const fileName = resumeFileName(first, last, company, title);
     const now = (opts.now ?? (() => new Date()))();
 
+    const runId = randomUUID();
     const applicationId = opts.db
       ? persistOutput(opts.db, {
           jobUrl: req.job.url,
@@ -75,12 +76,12 @@ export function makeTailorJob(opts: {
           jobTitle: title,
           resumeLatex: out.tex,
           coverLetter: out.coverLetter,
-          rewritingReport: { overallConfidence: 1, perBullet: out.edits },
+          // runId + version: the dashboard lists this row as the run's v0.
+          rewritingReport: { overallConfidence: 1, perBullet: out.edits, runId, version: 0 },
           jobDescription: req.job.description || undefined,
         }).applicationId
       : deterministicAppId(req.job.url);
 
-    const runId = randomUUID();
     const labels = partLabels(parseResume(masterTex));
     const appsDir = join(opts.dir, "applications");
     const savedTo = uniqueRunDir(appsDir, applicationDirName(now, company, title));

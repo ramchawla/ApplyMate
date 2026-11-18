@@ -1,3 +1,5 @@
+import { latexToMarked } from "./latex-text";
+
 export type DiffPart = { op: "same" | "add" | "del"; text: string };
 
 // Word token = non-space run plus its trailing whitespace; leading whitespace is its own token.
@@ -49,4 +51,27 @@ export function wordDiff(before: string, after: string): DiffPart[] {
   }
   flush();
   return parts;
+}
+
+export type MarkedPart = { op: DiffPart["op"]; segs: { text: string; bold: boolean }[] };
+
+// Word diff of two LaTeX strings as rendered text, bold kept; renderers (side panel
+// Diff, dashboard BulletDiff) only map this to <del>/<ins>/<b>. Bold is tracked per
+// side (before = same+del, after = same+add), so a **run** the diff splits across
+// parts stays bold. `plain`: letters/answers, no LaTeX, no bold.
+export function markedDiff(before: string, after: string, plain = false): MarkedPart[] {
+  let boldBefore = false;
+  let boldAfter = false;
+  const parts = plain ? wordDiff(before, after) : wordDiff(latexToMarked(before), latexToMarked(after));
+  return parts.map((p) => {
+    const segs: MarkedPart["segs"] = [];
+    (plain ? [p.text] : p.text.split("**")).forEach((seg, j) => {
+      if (j > 0) {
+        if (p.op !== "add") boldBefore = !boldBefore;
+        if (p.op !== "del") boldAfter = !boldAfter;
+      }
+      if (seg) segs.push({ text: seg, bold: p.op === "del" ? boldBefore : boldAfter });
+    });
+    return { op: p.op, segs };
+  });
 }

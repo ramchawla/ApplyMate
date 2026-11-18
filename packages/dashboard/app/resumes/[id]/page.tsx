@@ -28,7 +28,7 @@ export default function ResumeVersionPage({
       <h1 className="text-xl font-bold">
         Resume Version {version.versionNumber}
       </h1>
-      <div className="text-sm text-gray-500">
+      <div className="text-sm text-text-3">
         {Math.round(version.overallConfidence * 100)}% overall confidence
       </div>
 
@@ -40,7 +40,7 @@ export default function ResumeVersionPage({
 
       <details>
         <summary className="text-sm cursor-pointer">Raw LaTeX</summary>
-        <pre className="text-xs bg-white border rounded p-2 overflow-x-auto whitespace-pre-wrap">
+        <pre className="text-xs bg-surface border rounded p-2 overflow-x-auto whitespace-pre-wrap">
           {version.latex}
         </pre>
       </details>

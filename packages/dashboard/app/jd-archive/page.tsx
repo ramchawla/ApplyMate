@@ -26,15 +26,15 @@ export default function JdArchivePage({
         </button>
       </form>
       {q && (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-text-3">
           {results.length} match(es) for “{q}”.
         </p>
       )}
-      <ul className="divide-y bg-white rounded border">
+      <ul className="divide-y bg-surface rounded border">
         {results.map((r) => (
           <li key={r.id} className="p-3 text-sm">
             <span className="font-medium">{r.jobTitle}</span>
-            <span className="text-gray-500"> — {r.company}</span>
+            <span className="text-text-3"> — {r.company}</span>
           </li>
         ))}
       </ul>

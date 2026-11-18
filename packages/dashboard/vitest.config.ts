@@ -15,6 +15,6 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["../../tests/dashboard/**/*.test.ts"],
+    include: ["../../tests/dashboard/**/*.test.ts", "test/**/*.test.ts"],
   },
 });

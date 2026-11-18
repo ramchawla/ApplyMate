@@ -11,7 +11,7 @@ import { readRun, scanRuns, writeChat, writeState } from "../../../lib/local/run
 import { streamClaude, type StreamRunner } from "../../skill/src/tailor/claude-cli";
 import { CHAT_SYSTEM, buildChatPrompt, splitReply } from "../../skill/src/tailor/chat";
 import { validateProposals } from "../../skill/src/tailor/proposals";
-import { parseResume, renderResume } from "../../skill/src/tailor/resume-doc";
+import { parseResume, partTexts, renderResume } from "../../skill/src/tailor/resume-doc";
 import { coverLetterTex, profileName } from "../../skill/src/tailor/letter";
 import { fitBudget, fits, HEIGHT_SLACK_PT, type Compiled } from "../../skill/src/tailor/fit";
 
@@ -171,7 +171,7 @@ export function makeChat(opts: {
           versionNumber: listVersions(opts.db, applicationId).length + 1,
           latex: resumeTex,
           overallConfidence: 1,
-          report: { runId, version: state.version },
+          report: { runId, version: state.version, label: ref.undo ? `Undo: ${p.label}` : p.label },
         });
       } catch (err) {
         // Files are the source of truth; a missing dashboard row isn't worth failing the apply.
@@ -194,7 +194,7 @@ export function makeChat(opts: {
       if (!dirOf(runId)) return null;
       try {
         const { report, state, chat, masterTex } = load(runId);
-        const master = Object.fromEntries(parseResume(masterTex).parts.map((p) => [p.id, p.text]));
+        const master = partTexts(masterTex);
         return { report, state, chat, master };
       } catch (err) {
         console.error(`[ApplyMate] ${(err as Error).message}`);

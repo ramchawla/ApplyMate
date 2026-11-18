@@ -44,7 +44,7 @@ export function PdfCompiler({ latex }: { latex: string }) {
       {error && (
         <div className="space-y-1">
           <pre className="text-xs text-red-600 whitespace-pre-wrap">{error}</pre>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-text-3">
             Needs <code>tectonic</code> on the machine running the dashboard
             (<code>brew install tectonic</code>). The Raw LaTeX below can be
             compiled at Overleaf as a fallback.
