@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Diff } from "../../packages/extension/src/ui/components/Diff";
-import { buildRunView } from "../../lib/shared/run-view";
+import { buildRunView, nameIds } from "../../lib/shared/run-view";
 import { latexToMarked } from "../../lib/shared/latex-text";
 import type { RunFile, RunState } from "../../lib/shared/types";
 
@@ -202,5 +202,28 @@ describe("Diff", () => {
     );
     expect(out).toBe("in <b>agentic AI </b><del><b>tooling</b> </del><ins><b>systems</b> </ins>and <b>CI/CD</b>, 40%");
     expect(out).not.toMatch(/\*\*|\\/);
+  });
+});
+
+describe("nameIds (chat prose)", () => {
+  const labels = { summary: "Summary", "r0.b0": "Acme Corp · bullet 1", "r0.b1": "Acme Corp · bullet 2", "skills.tech": "Skills · Technologies" };
+  const qs = [{ fieldId: "q1", label: "Why Acme?" }];
+  it("bracketed ids, answer:<id> and rN / rN.bN / skills.x tokens become labels", () => {
+    expect(nameIds("I tightened [r0.b1] and [summary].", labels, qs)).toBe("I tightened Acme Corp · bullet 2 and Summary.");
+    expect(nameIds("See r0.b0, r0 and skills.tech; answer:q1 is thin.", labels, qs)).toBe(
+      "See Acme Corp · bullet 1, Acme Corp and Skills · Technologies; Why Acme? is thin.",
+    );
+    expect(nameIds("Updated [answer:q1].", labels, qs)).toBe("Updated Why Acme?.");
+  });
+  it("an echoed `[id] Label` keeps one copy of the label", () => {
+    expect(nameIds("[r0.b0] Acme Corp · bullet 1 overstates it.", labels, qs)).toBe("Acme Corp · bullet 1 overstates it.");
+    expect(nameIds("[answer:q1] Why Acme? reads generic.", labels, qs)).toBe("Why Acme? reads generic.");
+  });
+  it("leaves the plain word summary and unknown brackets alone", () => {
+    expect(nameIds("Your summary is vague [sic].", labels, qs)).toBe("Your summary is vague [sic].");
+    expect(nameIds("In summary: fine.", labels, qs)).toBe("In summary: fine.");
+  });
+  it("unknown ids never show raw", () => {
+    expect(nameIds("Drop r9.b9 and answer:zz.", labels, qs)).toBe("Drop a resume part and a form question.");
   });
 });

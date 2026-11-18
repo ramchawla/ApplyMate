@@ -39,6 +39,7 @@ describe("CHAT_SYSTEM", () => {
     expect(CHAT_SYSTEM).toMatch(/answer:<fieldId>/);
     expect(CHAT_SYSTEM).toMatch(/verbatim/);
     expect(CHAT_SYSTEM).toContain("\\% \\& \\$ \\# \\_");
+    expect(CHAT_SYSTEM).toMatch(/In your prose, refer to resume parts and questions by their label, never by the \[id\] or answer:<id>/);
   });
 });
 

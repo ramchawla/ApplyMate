@@ -8,6 +8,7 @@ import type { ApplyResult, ChatEvent, ChatMessage, RunFile, RunState, TailorQues
 import { compileLatexWithPages } from "../../../lib/local/compile-latex";
 import { insertResumeVersion, listVersions, type Db } from "../../../lib/local/db";
 import { readRun, scanRuns, writeChat, writeState } from "../../../lib/local/runs";
+import { nameIds } from "../../../lib/shared/run-view";
 import { streamClaude, type StreamRunner } from "../../skill/src/tailor/claude-cli";
 import { CHAT_SYSTEM, buildChatPrompt, splitReply } from "../../skill/src/tailor/chat";
 import { validateProposals } from "../../skill/src/tailor/proposals";
@@ -249,9 +250,11 @@ export function makeChat(opts: {
             );
           }
           if (parseError) notes.push(MALFORMED_NOTE);
+          // Backstop for the prompt's "labels, never ids" rule (streamed deltas may still show ids).
+          const prose = nameIds(reply, fresh.report.labels, [...fresh.state.questions, ...fresh.report.questions]);
           const assistant: ChatMessage = {
             role: "assistant",
-            text: [reply, ...notes].filter(Boolean).join("\n\n"),
+            text: [prose, ...notes].filter(Boolean).join("\n\n"),
             proposals: proposals.length ? proposals : undefined,
             at: Date.now(),
           };

@@ -28,17 +28,45 @@ export type RunView = {
 };
 
 const ROLE = /^r\d+$/;
+const PART = String.raw`r\d+(?:\.b\d+)?|skills\.[\w-]+`;
+
+// A role's name: its own label, else its bullets' ("Acme Corp · bullet 2" -> "Acme Corp").
+function roleName(labels: Record<string, string>, role: string): string | undefined {
+  if (labels[role]) return labels[role];
+  const b = Object.keys(labels).find((id) => id.startsWith(`${role}.b`));
+  return b ? labels[b].replace(/ · bullet \d+$/, "") : undefined;
+}
+
+// Part and question ids in text -> labels (the UI never shows a raw id): `[id]`,
+// `answer:<fieldId>`, and bare rN / rN.bN / skills.x tokens. A bare "summary" is an id
+// only in check warnings (`bareSummary`); in chat prose it's the English word.
+export function nameIds(
+  text: string,
+  labels: Record<string, string>,
+  questions: { fieldId: string; label: string }[] = [],
+  bareSummary = false,
+): string {
+  const part = (id: string) =>
+    ROLE.test(id) ? (roleName(labels, id) ?? "a role") : (labels[id] ?? "a resume part");
+  const question = (id: string) => questions.find((q) => q.fieldId === id)?.label ?? "a form question";
+  const re = new RegExp(
+    String.raw`\[answer:([^\]\s]+)\]( ?)|\[(summary|${PART})\]( ?)|\banswer:([\w-]+(?:[.:][\w-]+)*)|\b(${bareSummary ? "summary|" : ""}${PART})\b`,
+    "g",
+  );
+  return text.replace(re, (m, qa, s1, pa, s2, qb, pb, at: number, all: string) => {
+    const name = qa || qb ? question(qa ?? qb) : part(pa ?? pb);
+    // "[r1.b2] RBC · bullet 2" (the prompt's own format, echoed back): one copy.
+    if ((qa || pa) && all.startsWith(name, at + m.length)) return "";
+    return name + (s1 ?? s2 ?? "");
+  });
+}
+
 const items = (s: string) => s.split(",").map((x) => x.trim()).sort().join("\n");
 
 export function buildRunView(report: RunFile, state: RunState, master: Record<string, string>): RunView {
   // Unknown ids and Claude's free-text `where` both show as "Resume", never a raw id.
   const label = (id: string) => report.labels[id] ?? "Resume";
   const bulletsOf = (role: string) => Object.keys(master).filter((id) => id.startsWith(`${role}.b`));
-  const roleName = (role: string): string | undefined => {
-    if (report.labels[role]) return report.labels[role];
-    const b = Object.keys(report.labels).find((id) => id.startsWith(`${role}.b`));
-    return b ? report.labels[b].replace(/ · bullet \d+$/, "") : undefined;
-  };
   const { present, injected, skipped } = report.keywords;
 
   const keywords: RunView["keywords"] = [
@@ -69,7 +97,7 @@ export function buildRunView(report: RunFile, state: RunState, master: Record<st
     const toFront = [order[0], ...was.filter((id) => id !== order[0])].join() === order.join();
     changes.push({
       id: role,
-      label: `${roleName(role) ?? "Resume"} · bullet order`,
+      label: `${roleName(report.labels, role) ?? "Resume"} · bullet order`,
       before: "",
       after: "",
       reordered: toFront
@@ -88,9 +116,7 @@ export function buildRunView(report: RunFile, state: RunState, master: Record<st
 
   // Checks and run.ts embed ids in warnings ("r1.b2: dropped metric", "unknown role r3").
   const named = (w: string) => {
-    const s = w.replace(/\b(r\d+(?:\.b\d+)?|summary|skills\.[\w-]+)\b/g, (id: string) =>
-      ROLE.test(id) ? (roleName(id) ?? "a role") : (report.labels[id] ?? "a resume part"),
-    );
+    const s = nameIds(w, report.labels, [], true);
     return s.charAt(0).toUpperCase() + s.slice(1);
   };
 

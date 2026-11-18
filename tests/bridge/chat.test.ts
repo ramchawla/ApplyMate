@@ -133,6 +133,20 @@ describe("makeChat.send", () => {
     expect(saved[1].proposals).toHaveLength(1);
   });
 
+  it("raw part and question ids in Claude's prose become labels before saving", async () => {
+    const s = await setup();
+    const chat = makeChat({
+      appsDir: s.appsDir,
+      dir: s.dir,
+      stream: fakeStream("Your summary is fine; [summary] could lose a word, and answer:q2 should be 3-5."),
+      compile: fakeCompile,
+    });
+    const done = (await collect(chat, "thoughts?")).at(-1)!;
+    const want = "Your summary is fine; Summary could lose a word, and Years of Python should be 3-5.";
+    expect(done.t === "done" && done.message.text).toBe(want);
+    expect(readRun(s.runDir).chat[1].text).toBe(want);
+  });
+
   it("passes earlier history to the prompt", async () => {
     const s = await setup();
     const seen: { prompt?: string } = {};
