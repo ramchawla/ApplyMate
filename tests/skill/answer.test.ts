@@ -26,6 +26,11 @@ describe("answers-only prompt", () => {
     expect(ANSWER_SYSTEM).toMatch(/exactly one of the listed options/);
   });
 
+  it("ties 'why this company' answers to the profile's motivations", () => {
+    expect(ANSWER_SYSTEM).toMatch(/motivations/);
+    expect(ANSWER_SYSTEM).toMatch(/why this company|what interests you/i);
+  });
+
   it("returns only answers for asked fields", async () => {
     const out = await answerQuestions(req, files, {
       runClaude: async () => ({

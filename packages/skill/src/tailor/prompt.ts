@@ -24,7 +24,8 @@ export const FORM_ANSWERS = `FORM ANSWERS
 - Answer every listed question by fieldId.
 - If a question lists options, value must be exactly one of the listed options, copied verbatim.
 - Use the candidate profile for factual answers (work authorization, sponsorship, location, links, demographics). If the profile lacks the fact, choose the most neutral option (e.g. "Decline to self-identify") or return "".
-- Free-text answers: 2-4 specific sentences grounded in the corpus, first person, no cliches.`;
+- Free-text answers: 2-4 specific sentences grounded in the corpus, first person, no cliches.
+- Motivation questions (why this company, why this role, what interests you): name something specific about this company or role from the job description, and connect it to the candidate's own reasons from the profile's "motivations" (and to real work in the corpus). Never praise the company generically; if the job description says little about the company, lean on the role and the motivations instead of inventing facts.`;
 
 export const TAILOR_SYSTEM = `You tailor one software engineer's LaTeX resume to one job and draft their application answers. Respond only through the structured output schema.
 
