@@ -13,6 +13,24 @@ per-call cost beyond your plan's usage limits.
 the site's Submit yourself. It never signs in for you, never ticks consent
 boxes, and never invents employers, titles, dates or metrics.
 
+## How it runs without an API key
+
+ApplyMate never calls Anthropic itself. Its local bridge runs the `claude`
+command (Claude Code) on your computer, and Claude Code uses whichever Claude
+account is logged in there. Your usage counts against your own plan; no API key
+is involved.
+
+1. **Have a paid Claude plan.** Pro or Max both include Claude Code; the free plan doesn't.
+2. **Install Claude Code and log in once:**
+   ```bash
+   npm install -g @anthropic-ai/claude-code   # or the installer from claude.com/claude-code
+   claude                                      # then /login and sign in with your Claude account
+   claude -p "reply with ok"                   # prints ok = ApplyMate will work
+   ```
+3. **Make sure `ANTHROPIC_API_KEY` is not set** in your shell. If it is, Claude
+   Code bills that key instead of your plan. (ApplyMate never uses `--bare`, the
+   one Claude Code flag that would force API-key mode.)
+
 ## What you get
 
 - **⚡ One-click fill** on Greenhouse, Lever, Ashby, Workday, LinkedIn Easy Apply,
