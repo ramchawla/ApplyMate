@@ -111,7 +111,7 @@ the bridge is busy or offline.
 
 ```yaml
 name: { first: Ram, last: Chawla, preferred: Ram }
-email: chawlaram1@gmail.com
+email: jane@example.com
 phone: ""
 address: { street: "", city: "", state: "", zip: "", country: "" }
 location: ""            # "City, ST" free text
